@@ -77,7 +77,7 @@ scene.add(cube);
 window.log = () => {
   console.log(cube.material,cube.material.program);
   const gl = renderer.getContext();
-  const program = cube.material.program;
+  const program = renderer.properties.get(cube.material).currentProgram;
   const uniformCount = gl.getProgramParameter(program,gl.ACTIVE_UNIFORMS);
   const uniformList = [];
   for (let i = 0; i < uniformCount; i++) {
