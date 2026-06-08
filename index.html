@@ -1,0 +1,80 @@
+---
+layout: default
+---
+
+<canvas id="canvas"></canvas>
+
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+    }
+  }
+</script>
+<script type="module">
+
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+canvas.width = canvas.height = 512;
+
+const renderer = new THREE.WebGLRenderer({ canvas, context: canvas.getContext("webgl2",{ antialias: false, preserveDrawingBuffer: true }) });
+renderer.setSize(512,512,true);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+
+const camera = new THREE.PerspectiveCamera(90,canvas.width/canvas.height,0.125,256);
+camera.position.set(0,0,2);
+const scene = new THREE.Scene();
+
+const vs = `
+varying vec3 vP;
+varying vec3 vW;
+varying vec3 vN;
+void main() {
+  vP = position;
+  vN = normal;
+  vW = (modelMatrix*vec4(position,1)).xyz;
+  gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1);
+}`;
+
+const fs = `
+varying vec3 vP;
+varying vec3 vW;
+varying vec3 vN;
+uniform float iTime;
+
+vec3 render() {
+    vec3 ro = cameraPosition;
+    vec3 rd = normalize(vW-ro);
+    return rd;
+}
+
+void main() {
+  gl_FragColor = vec4(render(),1);
+}`;
+
+const cube = new THREE.Mesh(
+  new THREE.BoxGeometry(1,1,1),
+  new THREE.ShaderMaterial({
+    vertexShader: vs,
+    fragmentShader: fs,
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      iTime: { value: 0 }
+    }
+  })
+);
+scene.add(cube);
+
+const controls = new THREE.OrbitControls(camera,renderer.domElement);
+const update = (time) => {
+  material.uniforms.iTime.value = time*0.001;
+  renderer.render(scene,camera);
+  requestAnimationFrame(update);
+}
+update(0);
+  
+</script>
