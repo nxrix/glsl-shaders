@@ -20,8 +20,8 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 canvas.width = canvas.height = 512;
 
 const renderer = new THREE.WebGLRenderer({ canvas, context: canvas.getContext("webgl2",{ antialias: false, preserveDrawingBuffer: true }) });
-renderer.setSize(512,512,true);
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(canvas.width,canvas.height,true);
+renderer.setPixelRatio(1);
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
 const camera = new THREE.PerspectiveCamera(90,canvas.width/canvas.height,0.125,256);
@@ -44,6 +44,11 @@ varying vec3 vP;
 varying vec3 vW;
 varying vec3 vN;
 uniform float iTime;
+
+uniform float iA;
+uniform int iB;
+uniform vec3 iC;
+uniform mat4 iJ;
 
 vec3 render() {
     vec3 ro = cameraPosition;
@@ -69,7 +74,11 @@ const cube = new THREE.Mesh(
 );
 scene.add(cube);
 
-const controls = new THREE.OrbitControls(camera,renderer.domElement);
+const gl = renderer.getContext();
+const uniforms = gl.getProgramParameter(cube.material.program,gl.ACTIVE_UNIFORMS);
+console.log(uniforms);
+
+const controls = new OrbitControls(camera,renderer.domElement);
 const update = (time) => {
   material.uniforms.iTime.value = time*0.001;
   renderer.render(scene,camera);
