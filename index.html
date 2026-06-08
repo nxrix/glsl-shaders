@@ -119,393 +119,237 @@ for (let i = 0; i < uniformCount; i++) {
   });
 }
 
-const typeNames = {
-  5126: "float",           // FLOAT
-  5124: "int",             // INT
-  5125: "uint",            // UNSIGNED_INT
-  35664: "vec2",           // FLOAT_VEC2
-  35665: "vec3",           // FLOAT_VEC3
-  35666: "vec4",           // FLOAT_VEC4
-  35667: "ivec2",          // INT_VEC2
-  35668: "ivec3",          // INT_VEC3
-  35669: "ivec4",          // INT_VEC4
-  35670: "bool",           // BOOL
-  35671: "bvec2",          // BOOL_VEC2
-  35672: "bvec3",          // BOOL_VEC3
-  35673: "bvec4",          // BOOL_VEC4
-  36294: "uvec2",          // UNSIGNED_INT_VEC2
-  36295: "uvec3",          // UNSIGNED_INT_VEC3
-  36296: "uvec4",          // UNSIGNED_INT_VEC4
-  35676: "mat2",           // FLOAT_MAT2
-  35677: "mat3",           // FLOAT_MAT3
-  35678: "mat4",           // FLOAT_MAT4
-  35686: "mat2x3",         // FLOAT_MAT2x3
-  35687: "mat2x4",         // FLOAT_MAT2x4
-  35688: "mat3x2",         // FLOAT_MAT3x2
-  35689: "mat3x4",         // FLOAT_MAT3x4
-  35690: "mat4x2",         // FLOAT_MAT4x2
-  35691: "mat4x3",         // FLOAT_MAT4x3
-  35679: "sampler2D"       // SAMPLER_2D
-};
-
-function buildUniformTree(list) {
-  const tree = {};
-  for (const u of list) {
-    const parts = u.name.split(/\.|\[|\]/).filter(p => p !== "");
-    let current = tree;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      const nextIsIndex = (i+1 < parts.length && !isNaN(parseInt(parts[i+1])));
-      const key = part;
-      if (!current[key]) current[key] = { _type: null, _size: 1, _children: {} };
-      if (nextIsIndex) {
-        const idx = parseInt(parts[i+1]);
-        if (!current[key]._array) current[key]._array = [];
-        if (!current[key]._array[idx]) current[key]._array[idx] = { _children: {} };
-        current = current[key]._array[idx]._children;
-        i++;
-      } else {
-        if (i === parts.length-1) {
-          current[key]._type = typeNames[u.type];
-          current[key]._size = u.size;
-        } else {
-          current = current[key]._children;
-        }
-      }
-    }
-  }
-  return tree;
-}
-
-function initUniforms(material, tree, prefix = "") {
-  for (const key in tree) {
-    const node = tree[key];
-    const fullName = prefix ? `${prefix}.${key}` : key;
-    if (node._type) {
-      let defaultValue;
-      switch (node._type) {
-        case "float": defaultValue = 0; break;
-        case "int": defaultValue = 0; break;
-        case "uint": defaultValue = 0; break;
-        case "bool": defaultValue = false; break;
-        case "vec2": defaultValue = new THREE.Vector2(0,0); break;
-        case "vec3": defaultValue = new THREE.Vector3(0,0,0); break;
-        case "vec4": defaultValue = new THREE.Vector4(0,0,0,0); break;
-        case "ivec2": case "uvec2": defaultValue = new THREE.Vector2(0,0); break;
-        case "ivec3": case "uvec3": defaultValue = new THREE.Vector3(0,0,0); break;
-        case "ivec4": case "uvec4": defaultValue = new THREE.Vector4(0,0,0,0); break;
-        case "bvec2": defaultValue = new THREE.Vector2(false,false); break;
-        case "bvec3": defaultValue = new THREE.Vector3(false,false,false); break;
-        case "bvec4": defaultValue = new THREE.Vector4(false,false,false,false); break;
-        case "mat2": defaultValue = new THREE.Matrix2().identity(); break;
-        case "mat3": defaultValue = new THREE.Matrix3().identity(); break;
-        case "mat4": defaultValue = new THREE.Matrix4().identity(); break;
-        case "mat2x3": defaultValue = new THREE.Matrix3().set(1,0,0,0,1,0,0,0,1); break;
-        case "mat3x2": defaultValue = new THREE.Matrix3().set(1,0,0,0,1,0,0,0,1); break;
-        case "sampler2D": defaultValue = new THREE.Texture(); break;
-        default: defaultValue = 0;
-      }
-      if (node._size > 1 && node._type !== "sampler2D") {
-        defaultValue = Array(node._size).fill().map(() => defaultValue);
-      }
-      material.uniforms[fullName] = { value: defaultValue };
-    } else if (node._array) {
-      const arr = [];
-      for (let i = 0; i < node._array.length; i++) {
-        if (node._array[i]) {
-          const obj = {};
-          initStructUniforms(obj, node._array[i]._children);
-          arr.push(obj);
-        } else arr.push({});
-      }
-      material.uniforms[fullName] = { value: arr };
+function setNestedUniform(obj, path, value) {
+  const parts = path.split(/\.|\[|\]/).filter(p => p !== "");
+  for (let i = 0; i < parts.length - 1; i++) {
+    let part = parts[i];
+    let next = parts[i+1];
+    if (!isNaN(next)) {
+      if (!obj[part]) obj[part] = [];
+      obj = obj[part];
     } else {
-      material.uniforms[fullName] = { value: {} };
-      initUniforms(material, node._children, fullName);
+      if (!obj[part]) obj[part] = {};
+      obj = obj[part];
     }
+  }
+  const last = parts[parts.length-1];
+  obj[last] = value;
+}
+
+function getNestedUniform(obj, path) {
+  const parts = path.split(/\.|\[|\]/).filter(p => p !== "");
+  let cur = obj;
+  for (let p of parts) {
+    if (cur === undefined) return undefined;
+    if (!isNaN(p)) cur = cur[parseInt(p)];
+    else cur = cur[p];
+  }
+  return cur;
+}
+
+function defaultByType(type) {
+  switch(type) {
+    case "float": return 0;
+    case "int": return 0;
+    case "uint": return 0;
+    case "bool": return false;
+    case "vec2": case "ivec2": case "uvec2": return new THREE.Vector2(0,0);
+    case "vec3": case "ivec3": case "uvec3": return new THREE.Vector3(0,0,0);
+    case "vec4": case "ivec4": case "uvec4": return new THREE.Vector4(0,0,0,0);
+    case "bvec2": return new THREE.Vector2(false,false);
+    case "bvec3": return new THREE.Vector3(false,false,false);
+    case "bvec4": return new THREE.Vector4(false,false,false,false);
+    case "mat2": return new THREE.Matrix2().identity();
+    case "mat3": return new THREE.Matrix3().identity();
+    case "mat4": return new THREE.Matrix4().identity();
+    case "mat2x3": return new THREE.Matrix3().set(1,0,0, 0,1,0, 0,0,1);
+    case "mat3x2": return new THREE.Matrix3().set(1,0,0, 0,1,0, 0,0,1);
+    case "sampler2D": return new THREE.Texture();
+    default: return 0;
   }
 }
 
-function initStructUniforms(target, children) {
-  for (const k in children) {
-    const node = children[k];
-    if (node._type) {
-      target[k] = node._type === "float" ? 0 : (node._type === "int" ? 0 : (node._type === "bool" ? false : 0));
-    } else if (node._array) {
-      target[k] = [];
-    } else {
-      target[k] = {};
-      initStructUniforms(target[k], node._children);
-    }
-  }
-}
+for (let u of uniformList) {
+  const type = typeNames[u.type];
+  if (!type) continue;
+  const path = u.name;
+  const label = path.split(".").pop();
 
-function buildUI(tree, material, container, path = "") {
-  for (const key in tree) {
-    const node = tree[key];
-    const fullPath = path ? `${path}.${key}` : key;
-    const group = document.createElement("div");
-    group.style.marginBottom = "10px";
-    group.style.borderLeft = "2px solid #888";
-    group.style.paddingLeft = "8px";
-    const labelSpan = document.createElement("span");
-    labelSpan.textContent = key;
-    labelSpan.style.fontWeight = "bold";
-    group.appendChild(labelSpan);
-    if (node._type) {
-      const control = createControl(node._type, material.uniforms[fullPath].value, (newVal) => { material.uniforms[fullPath].value = newVal; });
-      group.appendChild(control);
-    } else if (node._array) {
-      const arrayContainer = document.createElement("div");
-      arrayContainer.style.marginLeft = "16px";
-      for (let i = 0; i < node._array.length; i++) {
-        const itemDiv = document.createElement("div");
-        itemDiv.style.marginTop = "6px";
-        const idxLabel = document.createElement("span");
-        idxLabel.textContent = `[${i}]`;
-        idxLabel.style.fontSize = "0.8rem";
-        itemDiv.appendChild(idxLabel);
-        if (node._array[i]) {
-          for (const subKey in node._array[i]._children) {
-            const subNode = node._array[i]._children[subKey];
-            const subFull = `${fullPath}[${i}].${subKey}`;
-            if (subNode._type) {
-              const subControl = createControl(subNode._type, material.uniforms[subFull].value, (v) => { material.uniforms[subFull].value = v; });
-              const row = document.createElement("div");
-              row.style.display = "flex";
-              row.style.alignItems = "center";
-              row.style.gap = "8px";
-              const subLabel = document.createElement("span");
-              subLabel.textContent = subKey;
-              subLabel.style.width = "70px";
-              row.appendChild(subLabel);
-              row.appendChild(subControl);
-              itemDiv.appendChild(row);
-            } else {
-              const structGroup = document.createElement("div");
-              structGroup.style.marginLeft = "20px";
-              const structTitle = document.createElement("div");
-              structTitle.textContent = subKey;
-              structGroup.appendChild(structTitle);
-              for (const deepKey in subNode._children) {
-                const deepNode = subNode._children[deepKey];
-                const deepFull = `${subFull}.${deepKey}`;
-                if (deepNode._type) {
-                  const ctrl = createControl(deepNode._type, material.uniforms[deepFull].value, (v) => { material.uniforms[deepFull].value = v; });
-                  const row = document.createElement("div");
-                  row.style.display = "flex";
-                  row.style.gap = "8px";
-                  const dLabel = document.createElement("span");
-                  dLabel.textContent = deepKey;
-                  dLabel.style.width = "70px";
-                  row.appendChild(dLabel);
-                  row.appendChild(ctrl);
-                  structGroup.appendChild(row);
-                }
-              }
-              itemDiv.appendChild(structGroup);
-            }
-          }
-        }
-        arrayContainer.appendChild(itemDiv);
-      }
-      group.appendChild(arrayContainer);
-    } else {
-      const innerDiv = document.createElement("div");
-      innerDiv.style.marginLeft = "16px";
-      buildUI(node._children, material, innerDiv, fullPath);
-      group.appendChild(innerDiv);
+  if (getNestedUniform(cube.material.uniforms, path) === undefined) {
+    let def = defaultByType(type);
+    if (u.size > 1 && type !== "sampler2D") {
+      def = Array(u.size).fill().map(() => defaultByType(type));
     }
-    container.appendChild(group);
+    setNestedUniform(cube.material.uniforms, path, def);
   }
-}
 
-function createControl(type, initial, onChange) {
-  const wrapper = document.createElement("div");
-  wrapper.style.marginTop = "5px";
-  if (type === "float") {
-    const inp = document.createElement("input");
-    inp.type = "number";
-    inp.step = "any";
-    inp.value = initial;
-    inp.oninput = () => onChange(parseFloat(inp.value));
-    wrapper.appendChild(inp);
-  } else if (type === "int" || type === "uint") {
-    const inp = document.createElement("input");
-    inp.type = "number";
-    inp.step = "1";
-    inp.value = initial;
-    inp.oninput = () => onChange(parseInt(inp.value));
-    wrapper.appendChild(inp);
-  } else if (type === "bool") {
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = initial;
-    cb.onchange = () => onChange(cb.checked);
-    wrapper.appendChild(cb);
-  } else if (type === "vec2" || type === "ivec2" || type === "uvec2") {
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.gap = "5px";
-    const vals = [initial.x, initial.y];
-    const inputs = [];
-    for (let i = 0; i < 2; i++) {
+  const row = document.createElement("div");
+  row.style.marginBottom = "8px";
+  const labelSpan = document.createElement("span");
+  labelSpan.textContent = label;
+  labelSpan.style.display = "inline-block";
+  labelSpan.style.width = "100px";
+  row.appendChild(labelSpan);
+
+  const control = (() => {
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "inline-block";
+
+    const getVal = () => getNestedUniform(cube.material.uniforms, path);
+    const setVal = (v) => setNestedUniform(cube.material.uniforms, path, v);
+
+    if (type === "float" || type === "int" || type === "uint") {
       const inp = document.createElement("input");
       inp.type = "number";
-      inp.step = type.startsWith("i") ? "1" : "any";
-      inp.value = vals[i];
-      inp.oninput = () => onChange(new THREE.Vector2(parseFloat(inputs[0].value), parseFloat(inputs[1].value)));
-      inputs.push(inp);
-      container.appendChild(inp);
+      inp.step = type === "float" ? "any" : "1";
+      inp.value = getVal();
+      inp.oninput = () => setVal(type === "float" ? parseFloat(inp.value) : parseInt(inp.value));
+      wrapper.appendChild(inp);
     }
-    wrapper.appendChild(container);
-  } else if (type === "vec3" || type === "ivec3" || type === "uvec3") {
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.gap = "5px";
-    const vals = [initial.x, initial.y, initial.z];
-    const inputs = [];
-    for (let i = 0; i < 3; i++) {
-      const inp = document.createElement("input");
-      inp.type = "number";
-      inp.step = type.startsWith("i") ? "1" : "any";
-      inp.value = vals[i];
-      inp.oninput = () => onChange(new THREE.Vector3(parseFloat(inputs[0].value), parseFloat(inputs[1].value), parseFloat(inputs[2].value)));
-      inputs.push(inp);
-      container.appendChild(inp);
-    }
-    wrapper.appendChild(container);
-  } else if (type === "vec4" || type === "ivec4" || type === "uvec4") {
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.gap = "5px";
-    const vals = [initial.x, initial.y, initial.z, initial.w];
-    const inputs = [];
-    for (let i = 0; i < 4; i++) {
-      const inp = document.createElement("input");
-      inp.type = "number";
-      inp.step = type.startsWith("i") ? "1" : "any";
-      inp.value = vals[i];
-      inp.oninput = () => onChange(new THREE.Vector4(parseFloat(inputs[0].value), parseFloat(inputs[1].value), parseFloat(inputs[2].value), parseFloat(inputs[3].value)));
-      inputs.push(inp);
-      container.appendChild(inp);
-    }
-    wrapper.appendChild(container);
-  } else if (type === "bvec2") {
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.gap = "8px";
-    for (let i = 0; i < 2; i++) {
+    else if (type === "bool") {
       const cb = document.createElement("input");
       cb.type = "checkbox";
-      cb.checked = initial[i];
-      cb.onchange = () => {
-        const newVal = new THREE.Vector2(container.children[0].querySelector("input").checked, container.children[1].querySelector("input").checked);
-        onChange(newVal);
-      };
-      const lbl = document.createElement("label");
-      lbl.appendChild(cb);
-      lbl.appendChild(document.createTextNode(["x","y"][i]));
-      container.appendChild(lbl);
+      cb.checked = getVal();
+      cb.onchange = () => setVal(cb.checked);
+      wrapper.appendChild(cb);
     }
-    wrapper.appendChild(container);
-  } else if (type === "bvec3") {
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.gap = "8px";
-    for (let i = 0; i < 3; i++) {
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = initial[i];
-      cb.onchange = () => {
-        const newVal = new THREE.Vector3(container.children[0].querySelector("input").checked, container.children[1].querySelector("input").checked, container.children[2].querySelector("input").checked);
-        onChange(newVal);
-      };
-      const lbl = document.createElement("label");
-      lbl.appendChild(cb);
-      lbl.appendChild(document.createTextNode(["x","y","z"][i]));
-      container.appendChild(lbl);
+    else if (type === "vec2" || type === "ivec2" || type === "uvec2") {
+      const div = document.createElement("div"); div.style.display = "flex"; div.style.gap = "4px";
+      const v = getVal();
+      for (let i = 0; i < 2; i++) {
+        const inp = document.createElement("input");
+        inp.type = "number";
+        inp.step = type.startsWith("i") ? "1" : "any";
+        inp.value = v[["x","y"][i]];
+        inp.oninput = () => setVal(new THREE.Vector2(div.children[0].value, div.children[1].value));
+        div.appendChild(inp);
+      }
+      wrapper.appendChild(div);
     }
-    wrapper.appendChild(container);
-  } else if (type === "bvec4") {
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.gap = "8px";
-    for (let i = 0; i < 4; i++) {
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = initial[i];
-      cb.onchange = () => {
-        const newVal = new THREE.Vector4(container.children[0].querySelector("input").checked, container.children[1].querySelector("input").checked, container.children[2].querySelector("input").checked, container.children[3].querySelector("input").checked);
-        onChange(newVal);
-      };
-      const lbl = document.createElement("label");
-      lbl.appendChild(cb);
-      lbl.appendChild(document.createTextNode(["x","y","z","w"][i]));
-      container.appendChild(lbl);
+    else if (type === "vec3" || type === "ivec3" || type === "uvec3") {
+      const div = document.createElement("div"); div.style.display = "flex"; div.style.gap = "4px";
+      const v = getVal();
+      for (let i = 0; i < 3; i++) {
+        const inp = document.createElement("input");
+        inp.type = "number";
+        inp.step = type.startsWith("i") ? "1" : "any";
+        inp.value = v[["x","y","z"][i]];
+        inp.oninput = () => setVal(new THREE.Vector3(div.children[0].value, div.children[1].value, div.children[2].value));
+        div.appendChild(inp);
+      }
+      wrapper.appendChild(div);
     }
-    wrapper.appendChild(container);
-  } else if (type.startsWith("mat")) {
-    let rows, cols;
-    if (type === "mat2") { rows=2; cols=2; }
-    else if (type === "mat3") { rows=3; cols=3; }
-    else if (type === "mat4") { rows=4; cols=4; }
-    else if (type === "mat2x3") { rows=2; cols=3; }
-    else if (type === "mat2x4") { rows=2; cols=4; }
-    else if (type === "mat3x2") { rows=3; cols=2; }
-    else if (type === "mat3x4") { rows=3; cols=4; }
-    else if (type === "mat4x2") { rows=4; cols=2; }
-    else if (type === "mat4x3") { rows=4; cols=3; }
-    else { rows=2; cols=2; }
-    const container = document.createElement("div");
-    container.style.display = "grid";
-    container.style.gridTemplateColumns = `repeat(${cols}, 60px)`;
-    container.style.gap = "4px";
-    const elems = initial.elements || Array(rows*cols).fill(0);
-    const inputs = [];
-    for (let i = 0; i < rows*cols; i++) {
-      const inp = document.createElement("input");
-      inp.type = "number";
-      inp.step = "any";
-      inp.value = elems[i];
-      inp.oninput = () => {
-        const vals = inputs.map(i => parseFloat(i.value));
-        let mat;
-        if (rows===2 && cols===2) mat = new THREE.Matrix2().set(vals[0], vals[1], vals[2], vals[3]);
-        else if (rows===3 && cols===3) mat = new THREE.Matrix3().set(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6], vals[7], vals[8]);
-        else mat = new THREE.Matrix4().set(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6], vals[7], vals[8], vals[9], vals[10], vals[11], vals[12], vals[13], vals[14], vals[15]);
-        onChange(mat);
-      };
-      inputs.push(inp);
-      container.appendChild(inp);
+    else if (type === "vec4" || type === "ivec4" || type === "uvec4") {
+      const div = document.createElement("div"); div.style.display = "flex"; div.style.gap = "4px";
+      const v = getVal();
+      for (let i = 0; i < 4; i++) {
+        const inp = document.createElement("input");
+        inp.type = "number";
+        inp.step = type.startsWith("i") ? "1" : "any";
+        inp.value = v[["x","y","z","w"][i]];
+        inp.oninput = () => setVal(new THREE.Vector4(div.children[0].value, div.children[1].value, div.children[2].value, div.children[3].value));
+        div.appendChild(inp);
+      }
+      wrapper.appendChild(div);
     }
-    wrapper.appendChild(container);
-  } else if (type === "sampler2D") {
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = "image/*";
-    fileInput.onchange = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const img = new Image();
-        img.onload = () => {
-          const tex = new THREE.Texture(img);
-          tex.needsUpdate = true;
-          onChange(tex);
+    else if (type === "bvec2") {
+      const div = document.createElement("div"); div.style.display = "flex"; div.style.gap = "8px";
+      const v = getVal();
+      for (let i = 0; i < 2; i++) {
+        const cb = document.createElement("input"); cb.type = "checkbox";
+        cb.checked = v[["x","y"][i]];
+        cb.onchange = () => setVal(new THREE.Vector2(div.children[0].checked, div.children[1].checked));
+        const lbl = document.createElement("label"); lbl.appendChild(cb); lbl.append(["x","y"][i]);
+        div.appendChild(lbl);
+      }
+      wrapper.appendChild(div);
+    }
+    else if (type === "bvec3") {
+      const div = document.createElement("div"); div.style.display = "flex"; div.style.gap = "8px";
+      const v = getVal();
+      for (let i = 0; i < 3; i++) {
+        const cb = document.createElement("input"); cb.type = "checkbox";
+        cb.checked = v[["x","y","z"][i]];
+        cb.onchange = () => setVal(new THREE.Vector3(div.children[0].checked, div.children[1].checked, div.children[2].checked));
+        const lbl = document.createElement("label"); lbl.appendChild(cb); lbl.append(["x","y","z"][i]);
+        div.appendChild(lbl);
+      }
+      wrapper.appendChild(div);
+    }
+    else if (type === "bvec4") {
+      const div = document.createElement("div"); div.style.display = "flex"; div.style.gap = "8px";
+      const v = getVal();
+      for (let i = 0; i < 4; i++) {
+        const cb = document.createElement("input"); cb.type = "checkbox";
+        cb.checked = v[["x","y","z","w"][i]];
+        cb.onchange = () => setVal(new THREE.Vector4(div.children[0].checked, div.children[1].checked, div.children[2].checked, div.children[3].checked));
+        const lbl = document.createElement("label"); lbl.appendChild(cb); lbl.append(["x","y","z","w"][i]);
+        div.appendChild(lbl);
+      }
+      wrapper.appendChild(div);
+    }
+    else if (type.startsWith("mat")) {
+      let rows, cols;
+      if (type === "mat2") { rows=2; cols=2; }
+      else if (type === "mat3") { rows=3; cols=3; }
+      else if (type === "mat4") { rows=4; cols=4; }
+      else if (type === "mat2x3") { rows=2; cols=3; }
+      else if (type === "mat2x4") { rows=2; cols=4; }
+      else if (type === "mat3x2") { rows=3; cols=2; }
+      else if (type === "mat3x4") { rows=3; cols=4; }
+      else if (type === "mat4x2") { rows=4; cols=2; }
+      else if (type === "mat4x3") { rows=4; cols=3; }
+      else { rows=2; cols=2; }
+      const div = document.createElement("div");
+      div.style.display = "grid";
+      div.style.gridTemplateColumns = `repeat(${cols}, 50px)`;
+      div.style.gap = "4px";
+      const mat = getVal();
+      const elems = mat.elements || Array(rows*cols).fill(0);
+      const inputs = [];
+      for (let i = 0; i < rows*cols; i++) {
+        const inp = document.createElement("input");
+        inp.type = "number"; inp.step = "any"; inp.value = elems[i];
+        inp.oninput = () => {
+          const vals = inputs.map(i => parseFloat(i.value));
+          let newMat;
+          if (rows===2 && cols===2) newMat = new THREE.Matrix2().set(vals[0], vals[1], vals[2], vals[3]);
+          else if (rows===3 && cols===3) newMat = new THREE.Matrix3().set(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6], vals[7], vals[8]);
+          else newMat = new THREE.Matrix4().set(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6], vals[7], vals[8], vals[9], vals[10], vals[11], vals[12], vals[13], vals[14], vals[15]);
+          setVal(newMat);
         };
-        img.src = URL.createObjectURL(file);
+        inputs.push(inp);
+        div.appendChild(inp);
       }
-    };
-    wrapper.appendChild(fileInput);
-  } else {
-    wrapper.textContent = "unsupported";
-  }
-  return wrapper;
-}
+      wrapper.appendChild(div);
+    }
+    else if (type === "sampler2D") {
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = "image/*";
+      fileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const img = new Image();
+          img.onload = () => {
+            const tex = new THREE.Texture(img);
+            tex.needsUpdate = true;
+            setVal(tex);
+          };
+          img.src = URL.createObjectURL(file);
+        }
+      };
+      wrapper.appendChild(fileInput);
+    }
+    else {
+      wrapper.textContent = "?";
+    }
+    return wrapper;
+  })();
 
-const uniformTree = buildUniformTree(uniformList);
-initUniforms(cube.material,uniformTree);
-buildUI(uniformTree,cube.material,uniforms);
+  row.appendChild(control);
+  uniforms.appendChild(row);
+}
 
 const controls = new OrbitControls(camera,renderer.domElement);
 const update = (time) => {
