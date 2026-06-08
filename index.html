@@ -118,385 +118,250 @@ for (let i = 0; i < uniformCount; i++) {
   });
 }
 
-(function() {
-  const container = document.getElementById('uniforms');
-  if (!container) return;
-  container.innerHTML = '';
+const uniformsHost = document.getElementById("uniforms");
 
-  // Type info mapping (GLenum -> UI behavior)
-  const TYPE_MAP = {
-    [gl.FLOAT]:         { js: 'float', ui: 'float', ctor: (v) => parseFloat(v) },
-    [gl.FLOAT_VEC2]:    { js: 'vec2',  ui: 'vec2',  ctor: (arr) => new THREE.Vector2(arr[0], arr[1]) },
-    [gl.FLOAT_VEC3]:    { js: 'vec3',  ui: 'vec3',  ctor: (arr) => new THREE.Vector3(arr[0], arr[1], arr[2]) },
-    [gl.FLOAT_VEC4]:    { js: 'vec4',  ui: 'vec4',  ctor: (arr) => new THREE.Vector4(arr[0], arr[1], arr[2], arr[3]) },
-    [gl.INT]:           { js: 'int',   ui: 'int',   ctor: (v) => parseInt(v, 10) },
-    [gl.INT_VEC2]:      { js: 'ivec2', ui: 'ivec2', ctor: (arr) => [parseInt(arr[0],10), parseInt(arr[1],10)] },
-    [gl.INT_VEC3]:      { js: 'ivec3', ui: 'ivec3', ctor: (arr) => [parseInt(arr[0],10), parseInt(arr[1],10), parseInt(arr[2],10)] },
-    [gl.INT_VEC4]:      { js: 'ivec4', ui: 'ivec4', ctor: (arr) => [parseInt(arr[0],10), parseInt(arr[1],10), parseInt(arr[2],10), parseInt(arr[3],10)] },
-    [gl.UNSIGNED_INT]:  { js: 'uint',  ui: 'uint',  ctor: (v) => parseInt(v, 10) },
-    [gl.UNSIGNED_INT_VEC2]: { js:'uvec2', ui:'uvec2', ctor:(arr)=>[parseInt(arr[0],10), parseInt(arr[1],10)] },
-    [gl.UNSIGNED_INT_VEC3]: { js:'uvec3', ui:'uvec3', ctor:(arr)=>[parseInt(arr[0],10), parseInt(arr[1],10), parseInt(arr[2],10)] },
-    [gl.UNSIGNED_INT_VEC4]: { js:'uvec4', ui:'uvec4', ctor:(arr)=>[parseInt(arr[0],10), parseInt(arr[1],10), parseInt(arr[2],10), parseInt(arr[3],10)] },
-    [gl.BOOL]:          { js: 'bool',  ui: 'bool',  ctor: (v) => !!v },
-    [gl.BOOL_VEC2]:     { js: 'bvec2', ui: 'bvec2', ctor: (arr) => [!!arr[0], !!arr[1]] },
-    [gl.BOOL_VEC3]:     { js: 'bvec3', ui: 'bvec3', ctor: (arr) => [!!arr[0], !!arr[1], !!arr[2]] },
-    [gl.BOOL_VEC4]:     { js: 'bvec4', ui: 'bvec4', ctor: (arr) => [!!arr[0], !!arr[1], !!arr[2], !!arr[3]] },
-    [gl.FLOAT_MAT2]:    { js: 'mat2',  ui: 'mat2',  rows:2, cols:2, ctor: (arr) => new THREE.Matrix2().set(...arr) },
-    [gl.FLOAT_MAT3]:    { js: 'mat3',  ui: 'mat3',  rows:3, cols:3, ctor: (arr) => new THREE.Matrix3().set(...arr) },
-    [gl.FLOAT_MAT4]:    { js: 'mat4',  ui: 'mat4',  rows:4, cols:4, ctor: (arr) => new THREE.Matrix4().set(...arr) },
-    [gl.FLOAT_MAT2x3]:  { js: 'mat2x3',ui: 'mat2x3',rows:2,cols:3, ctor: (arr) => arr },
-    [gl.FLOAT_MAT2x4]:  { js: 'mat2x4',ui: 'mat2x4',rows:2,cols:4, ctor: (arr) => arr },
-    [gl.FLOAT_MAT3x2]:  { js: 'mat3x2',ui: 'mat3x2',rows:3,cols:2, ctor: (arr) => arr },
-    [gl.FLOAT_MAT3x4]:  { js: 'mat3x4',ui: 'mat3x4',rows:3,cols:4, ctor: (arr) => arr },
-    [gl.FLOAT_MAT4x2]:  { js: 'mat4x2',ui: 'mat4x2',rows:4,cols:2, ctor: (arr) => arr },
-    [gl.FLOAT_MAT4x3]:  { js: 'mat4x3',ui: 'mat4x3',rows:4,cols:3, ctor: (arr) => arr },
-    [gl.SAMPLER_2D]:    { js: 'sampler2D', ui: 'texture', ctor: (img) => new THREE.Texture(img) }
+const specOf = (t) => {
+  switch (t) {
+    case gl.FLOAT: return { kind: "float", comps: 1 };
+    case gl.FLOAT_VEC2: return { kind: "float", comps: 2 };
+    case gl.FLOAT_VEC3: return { kind: "float", comps: 3 };
+    case gl.FLOAT_VEC4: return { kind: "float", comps: 4 };
+    case gl.INT: return { kind: "int", comps: 1 };
+    case gl.INT_VEC2: return { kind: "int", comps: 2 };
+    case gl.INT_VEC3: return { kind: "int", comps: 3 };
+    case gl.INT_VEC4: return { kind: "int", comps: 4 };
+    case gl.UNSIGNED_INT: return { kind: "uint", comps: 1 };
+    case gl.UNSIGNED_INT_VEC2: return { kind: "uint", comps: 2 };
+    case gl.UNSIGNED_INT_VEC3: return { kind: "uint", comps: 3 };
+    case gl.UNSIGNED_INT_VEC4: return { kind: "uint", comps: 4 };
+    case gl.BOOL: return { kind: "bool", comps: 1 };
+    case gl.BOOL_VEC2: return { kind: "bool", comps: 2 };
+    case gl.BOOL_VEC3: return { kind: "bool", comps: 3 };
+    case gl.BOOL_VEC4: return { kind: "bool", comps: 4 };
+    case gl.FLOAT_MAT2: return { kind: "mat", rows: 2, cols: 2 };
+    case gl.FLOAT_MAT3: return { kind: "mat", rows: 3, cols: 3 };
+    case gl.FLOAT_MAT4: return { kind: "mat", rows: 4, cols: 4 };
+    case gl.FLOAT_MAT2x3: return { kind: "mat", rows: 3, cols: 2 };
+    case gl.FLOAT_MAT2x4: return { kind: "mat", rows: 4, cols: 2 };
+    case gl.FLOAT_MAT3x2: return { kind: "mat", rows: 2, cols: 3 };
+    case gl.FLOAT_MAT3x4: return { kind: "mat", rows: 4, cols: 3 };
+    case gl.FLOAT_MAT4x2: return { kind: "mat", rows: 2, cols: 4 };
+    case gl.FLOAT_MAT4x3: return { kind: "mat", rows: 3, cols: 4 };
+    case gl.SAMPLER_2D: return { kind: "sampler2D" };
+    default: return { kind: "other" };
+  }
+};
+
+const makeTexture = () => {
+  const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+  t.needsUpdate = true;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+};
+
+const makeValue = (spec, count) => {
+  const one = () => {
+    if (spec.kind === "float") return spec.comps === 1 ? 0 : Array(spec.comps).fill(0);
+    if (spec.kind === "int") return spec.comps === 1 ? 0 : Array(spec.comps).fill(0);
+    if (spec.kind === "uint") return spec.comps === 1 ? 0 : Array(spec.comps).fill(0);
+    if (spec.kind === "bool") return spec.comps === 1 ? false : Array(spec.comps).fill(false);
+    if (spec.kind === "mat") {
+      const a = Array(spec.rows * spec.cols).fill(0);
+      for (let i = 0; i < Math.min(spec.rows, spec.cols); i++) a[i * spec.rows + i] = 1;
+      return a;
+    }
+    if (spec.kind === "sampler2D") return makeTexture();
+    return 0;
   };
+  return count > 1 ? Array.from({ length: count }, one) : one();
+};
 
-  // Parse uniform name into path segments (strings for fields, numbers for array indices)
-  function parsePath(name) {
-    const parts = [];
-    let current = '';
-    for (let i = 0; i < name.length; i++) {
-      const ch = name[i];
-      if (ch === '.') {
-        if (current) parts.push(current);
-        current = '';
-      } else if (ch === '[') {
-        if (current) parts.push(current);
-        current = '';
-        let j = i+1;
-        while (j < name.length && name[j] !== ']') j++;
-        const idx = parseInt(name.slice(i+1, j), 10);
-        parts.push(idx);
-        i = j;
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-    if (current) parts.push(current);
-    return parts;
+const notify = () => {
+  cube.material.uniformsNeedUpdate = true;
+};
+
+const setNumberInput = (input, read, write, integer, minZero) => {
+  input.type = "number";
+  input.step = integer ? "1" : "any";
+  if (minZero) input.min = "0";
+  input.value = read();
+  input.addEventListener("input", () => {
+    const v = integer ? (Number.parseInt(input.value, 10) || 0) : (Number(input.value) || 0);
+    write(minZero ? Math.max(0, v) : v);
+    notify();
+  });
+};
+
+const setBoolInput = (input, read, write) => {
+  input.type = "checkbox";
+  input.checked = !!read();
+  input.addEventListener("input", () => {
+    write(!!input.checked);
+    notify();
+  });
+};
+
+const setMatrixInput = (input, value, r, c, rows, write) => {
+  input.type = "number";
+  input.step = "any";
+  input.value = value[c * rows + r];
+  input.addEventListener("input", () => {
+    value[c * rows + r] = Number(input.value) || 0;
+    write(value);
+    notify();
+  });
+};
+
+const buildSingle = (host, value, spec, write) => {
+  if (spec.kind === "sampler2D") {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.addEventListener("change", () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        value.image = img;
+        value.needsUpdate = true;
+        URL.revokeObjectURL(url);
+        write(value);
+        notify();
+      };
+      img.src = url;
+    });
+    host.appendChild(input);
+    return;
   }
 
-  // Build tree from flat uniform list, skipping iTime
-  const filteredUniforms = uniformList.filter(u => u.name !== 'iTime');
-  function buildTree(uniforms) {
-    const root = { children: new Map() };
-    for (const item of uniforms) {
-      const path = parsePath(item.name);
-      let node = root;
-      for (let i = 0; i < path.length; i++) {
-        const seg = path[i];
-        const isLast = (i === path.length-1);
-        if (!node.children.has(seg)) {
-          node.children.set(seg, {
-            name: seg,
-            children: new Map(),
-            uniformItem: null,
-            typeInfo: null,
-            parent: node,
-            arraySize: null
-          });
-        }
-        node = node.children.get(seg);
-        if (isLast) {
-          node.uniformItem = item;
-          node.typeInfo = TYPE_MAP[item.type];
-        }
+  if (spec.kind === "mat") {
+    const grid = document.createElement("div");
+    for (let r = 0; r < spec.rows; r++) {
+      for (let c = 0; c < spec.cols; c++) {
+        const input = document.createElement("input");
+        setMatrixInput(input, value, r, c, spec.rows, write);
+        grid.appendChild(input);
       }
+      if (r + 1 < spec.rows) grid.appendChild(document.createElement("br"));
     }
-    // Detect array nodes: if a node's children are all numeric and have same typeInfo, and their parent has arraySize from uniform size
-    function markArrays(node) {
-      const childKeys = Array.from(node.children.keys());
-      const allNumeric = childKeys.every(k => typeof k === 'number');
-      if (allNumeric && childKeys.length > 0) {
-        // check if first child has uniformItem with size > 1 (array of primitives) or is struct
-        const firstChild = node.children.get(childKeys[0]);
-        if (firstChild.uniformItem && firstChild.uniformItem.size > 1) {
-          node.isArray = true;
-          node.arraySize = firstChild.uniformItem.size;
-          node.arrayTypeInfo = firstChild.typeInfo;
-        } else if (firstChild.children.size > 0) {
-          // array of structs: size is max index+1
-          const maxIdx = Math.max(...childKeys);
-          node.isArray = true;
-          node.arraySize = maxIdx + 1;
-        }
-      }
-      for (let child of node.children.values()) markArrays(child);
-    }
-    markArrays(root);
-    return root;
+    host.appendChild(grid);
+    return;
   }
 
-  // Recursively create UI
-  function buildUI(node, parentEl, path = []) {
-    // Sort children: indices first then strings, but for arrays we handle specially
-    const childEntries = Array.from(node.children.entries());
-    // Process array nodes first (they have isArray flag)
-    for (const [key, child] of childEntries) {
-      if (child.isArray) {
-        // Create collapsible section for the array
-        const details = document.createElement('details');
-        details.style.marginLeft = '1rem';
-        const summary = document.createElement('summary');
-        const arrayName = key;
-        summary.textContent = `${arrayName} [${child.arraySize}]`;
-        summary.style.fontWeight = 'bold';
-        summary.style.cursor = 'pointer';
-        details.appendChild(summary);
-        const groupDiv = document.createElement('div');
-        groupDiv.style.marginLeft = '1rem';
-        groupDiv.style.borderLeft = '1px solid #ccc';
-        groupDiv.style.paddingLeft = '0.5rem';
-        details.appendChild(groupDiv);
-        parentEl.appendChild(details);
-
-        // If this is an array of primitives (e.g., float w[4]), create a row of inputs per index
-        if (child.arrayTypeInfo && child.children.size === child.arraySize) {
-          // Array of scalar/vector: show all indices in one line per index?
-          // Better: show each index as a separate control, but not nested too deep.
-          for (let idx = 0; idx < child.arraySize; idx++) {
-            const elemNode = child.children.get(idx);
-            if (!elemNode || !elemNode.uniformItem) continue;
-            const flatName = [...path, key, idx].join('.').replace(/\.(\d+)/g, '[$1]');
-            const typeInfo = elemNode.typeInfo;
-            // Ensure uniform exists
-            if (!cube.material.uniforms[flatName]) {
-              let defaultValue = null;
-              if (typeInfo.ui === 'float') defaultValue = 0;
-              else if (typeInfo.ui === 'int') defaultValue = 0;
-              else if (typeInfo.ui === 'bool') defaultValue = false;
-              else if (typeInfo.ui === 'vec2') defaultValue = new THREE.Vector2();
-              else if (typeInfo.ui === 'vec3') defaultValue = new THREE.Vector3();
-              else defaultValue = null;
-              cube.material.uniforms[flatName] = { value: defaultValue };
-            }
-            const row = document.createElement('div');
-            row.style.marginBottom = '0.3rem';
-            row.style.display = 'flex';
-            row.style.alignItems = 'center';
-            row.style.gap = '0.5rem';
-            const idxLabel = document.createElement('label');
-            idxLabel.textContent = `[${idx}]`;
-            idxLabel.style.fontFamily = 'monospace';
-            idxLabel.style.minWidth = '40px';
-            row.appendChild(idxLabel);
-            // Create input(s) for this primitive
-            const componentCount = { 'float':1, 'int':1, 'uint':1, 'bool':1,
-                                     'vec2':2, 'ivec2':2, 'uvec2':2, 'bvec2':2,
-                                     'vec3':3, 'ivec3':3, 'uvec3':3, 'bvec3':3,
-                                     'vec4':4, 'ivec4':4, 'uvec4':4, 'bvec4':4 }[typeInfo.ui] || 1;
-            const isBool = typeInfo.ui.startsWith('bvec') || typeInfo.ui === 'bool';
-            const inputs = [];
-            for (let i = 0; i < componentCount; i++) {
-              let inp;
-              if (isBool) {
-                inp = document.createElement('input');
-                inp.type = 'checkbox';
-                const cur = cube.material.uniforms[flatName].value;
-                if (componentCount === 1) inp.checked = cur;
-                else if (cur && cur[i] !== undefined) inp.checked = cur[i];
-              } else {
-                inp = document.createElement('input');
-                inp.type = 'number';
-                inp.step = typeInfo.ui.includes('int') ? '1' : 'any';
-                inp.style.width = '60px';
-                const cur = cube.material.uniforms[flatName].value;
-                if (componentCount === 1) inp.value = cur !== undefined ? cur : 0;
-                else if (cur && cur[i] !== undefined) inp.value = cur[i];
-                else inp.value = 0;
-              }
-              inputs.push(inp);
-              row.appendChild(inp);
-            }
-            const update = () => {
-              let newVal;
-              if (componentCount === 1) {
-                newVal = isBool ? inputs[0].checked : (typeInfo.ui.includes('int') ? parseInt(inputs[0].value,10) : parseFloat(inputs[0].value));
-              } else {
-                const arr = inputs.map(inp => isBool ? inp.checked : (typeInfo.ui.includes('int') ? parseInt(inp.value,10) : parseFloat(inp.value)));
-                newVal = typeInfo.ctor(arr);
-              }
-              cube.material.uniforms[flatName].value = newVal;
-            };
-            inputs.forEach(inp => inp.addEventListener('input', update));
-            groupDiv.appendChild(row);
-          }
-        } else {
-          // Array of structs: recursively build UI for each element
-          for (let idx = 0; idx < child.arraySize; idx++) {
-            const elemNode = child.children.get(idx);
-            if (!elemNode) continue;
-            const elemDetails = document.createElement('details');
-            elemDetails.style.marginLeft = '0.5rem';
-            const elemSummary = document.createElement('summary');
-            elemSummary.textContent = `[${idx}]`;
-            elemSummary.style.cursor = 'pointer';
-            elemDetails.appendChild(elemSummary);
-            const elemDiv = document.createElement('div');
-            elemDiv.style.marginLeft = '1rem';
-            elemDetails.appendChild(elemDiv);
-            groupDiv.appendChild(elemDetails);
-            buildUI(elemNode, elemDiv, [...path, key, idx]);
-          }
-        }
-      }
+  if (spec.comps === 1) {
+    const input = document.createElement("input");
+    setNumberInput(
+      input,
+      () => value,
+      (v) => write(v),
+      spec.kind === "int" || spec.kind === "uint",
+      spec.kind === "uint"
+    );
+    if (spec.kind === "bool") {
+      const cb = document.createElement("input");
+      setBoolInput(cb, () => value, (v) => write(v));
+      host.appendChild(cb);
+    } else {
+      host.appendChild(input);
     }
-    // Process non-array nodes (structs and leaf uniforms)
-    for (const [key, child] of childEntries) {
-      if (child.isArray) continue; // already processed
-      const fullPath = [...path, key];
-      const flatName = fullPath.join('.').replace(/\.(\d+)/g, '[$1]');
-      
-      if (child.children.size > 0 && !child.uniformItem) {
-        // Struct node
-        const details = document.createElement('details');
-        details.style.marginLeft = '1rem';
-        const summary = document.createElement('summary');
-        summary.textContent = key;
-        summary.style.fontWeight = 'bold';
-        summary.style.cursor = 'pointer';
-        details.appendChild(summary);
-        const groupDiv = document.createElement('div');
-        groupDiv.style.marginLeft = '1rem';
-        groupDiv.style.borderLeft = '1px solid #ccc';
-        groupDiv.style.paddingLeft = '0.5rem';
-        details.appendChild(groupDiv);
-        parentEl.appendChild(details);
-        buildUI(child, groupDiv, fullPath);
-      } else if (child.uniformItem) {
-        // Leaf uniform
-        const typeInfo = child.typeInfo;
-        if (!typeInfo) continue;
-        
-        // Ensure uniform exists
-        if (!cube.material.uniforms[flatName]) {
-          let defaultValue;
-          if (typeInfo.ui === 'texture') defaultValue = new THREE.Texture();
-          else if (typeInfo.ui === 'float') defaultValue = 0;
-          else if (typeInfo.ui === 'int') defaultValue = 0;
-          else if (typeInfo.ui === 'uint') defaultValue = 0;
-          else if (typeInfo.ui === 'bool') defaultValue = false;
-          else if (typeInfo.ui === 'vec2') defaultValue = new THREE.Vector2();
-          else if (typeInfo.ui === 'vec3') defaultValue = new THREE.Vector3();
-          else if (typeInfo.ui === 'vec4') defaultValue = new THREE.Vector4();
-          else if (typeInfo.ui.startsWith('ivec')) defaultValue = [0,0,0,0].slice(0, typeInfo.ui === 'ivec2' ? 2 : typeInfo.ui === 'ivec3' ? 3 : 4);
-          else if (typeInfo.ui.startsWith('uvec')) defaultValue = [0,0,0,0].slice(0, typeInfo.ui === 'uvec2' ? 2 : typeInfo.ui === 'uvec3' ? 3 : 4);
-          else if (typeInfo.ui.startsWith('bvec')) defaultValue = [false,false,false,false].slice(0, typeInfo.ui === 'bvec2' ? 2 : typeInfo.ui === 'bvec3' ? 3 : 4);
-          else if (typeInfo.ui.startsWith('mat')) defaultValue = typeInfo.ctor(new Array(typeInfo.rows*typeInfo.cols).fill(0));
-          else defaultValue = null;
-          cube.material.uniforms[flatName] = { value: defaultValue };
-        }
-
-        const row = document.createElement('div');
-        row.style.marginBottom = '0.5rem';
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.flexWrap = 'wrap';
-        row.style.gap = '0.5rem';
-
-        const labelText = `${flatName} (${typeInfo.ui})`;
-        const label = document.createElement('label');
-        label.textContent = labelText;
-        label.style.fontFamily = 'monospace';
-        label.style.fontSize = '12px';
-        label.style.minWidth = '150px';
-        row.appendChild(label);
-
-        if (typeInfo.ui === 'texture') {
-          const fileInput = document.createElement('input');
-          fileInput.type = 'file';
-          fileInput.accept = 'image/*';
-          fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-              const img = new Image();
-              img.onload = () => {
-                const tex = new THREE.Texture(img);
-                tex.needsUpdate = true;
-                cube.material.uniforms[flatName].value = tex;
-              };
-              img.src = URL.createObjectURL(file);
-            }
-          });
-          row.appendChild(fileInput);
-        } else if (typeInfo.ui.startsWith('mat')) {
-          const rows = typeInfo.rows;
-          const cols = typeInfo.cols;
-          const table = document.createElement('table');
-          table.style.borderCollapse = 'collapse';
-          const inputs = [];
-          for (let r = 0; r < rows; r++) {
-            const tr = document.createElement('tr');
-            for (let c = 0; c < cols; c++) {
-              const td = document.createElement('td');
-              const inp = document.createElement('input');
-              inp.type = 'number';
-              inp.step = 'any';
-              inp.style.width = '60px';
-              inp.value = '0';
-              inp.addEventListener('input', () => {
-                const vals = inputs.map(i => parseFloat(i.value));
-                const mat = typeInfo.ctor(vals);
-                cube.material.uniforms[flatName].value = mat;
-              });
-              inputs.push(inp);
-              td.appendChild(inp);
-              tr.appendChild(td);
-            }
-            table.appendChild(tr);
-          }
-          row.appendChild(table);
-        } else {
-          const componentCount = { 'float':1, 'int':1, 'uint':1, 'bool':1,
-                                   'vec2':2, 'ivec2':2, 'uvec2':2, 'bvec2':2,
-                                   'vec3':3, 'ivec3':3, 'uvec3':3, 'bvec3':3,
-                                   'vec4':4, 'ivec4':4, 'uvec4':4, 'bvec4':4 }[typeInfo.ui] || 1;
-          const isBool = typeInfo.ui.startsWith('bvec') || typeInfo.ui === 'bool';
-          const inputs = [];
-          for (let i = 0; i < componentCount; i++) {
-            let inp;
-            if (isBool) {
-              inp = document.createElement('input');
-              inp.type = 'checkbox';
-              const cur = cube.material.uniforms[flatName].value;
-              if (componentCount === 1) inp.checked = cur;
-              else if (cur && cur[i] !== undefined) inp.checked = cur[i];
-            } else {
-              inp = document.createElement('input');
-              inp.type = 'number';
-              inp.step = typeInfo.ui.includes('int') ? '1' : 'any';
-              inp.style.width = '60px';
-              const cur = cube.material.uniforms[flatName].value;
-              if (componentCount === 1) inp.value = cur !== undefined ? cur : 0;
-              else if (cur && cur[i] !== undefined) inp.value = cur[i];
-              else inp.value = 0;
-            }
-            inputs.push(inp);
-            row.appendChild(inp);
-          }
-          const update = () => {
-            let newVal;
-            if (componentCount === 1) {
-              newVal = isBool ? inputs[0].checked : (typeInfo.ui.includes('int') ? parseInt(inputs[0].value,10) : parseFloat(inputs[0].value));
-            } else {
-              const arr = inputs.map(inp => isBool ? inp.checked : (typeInfo.ui.includes('int') ? parseInt(inp.value,10) : parseFloat(inp.value)));
-              newVal = typeInfo.ctor(arr);
-            }
-            cube.material.uniforms[flatName].value = newVal;
-          };
-          inputs.forEach(inp => inp.addEventListener('input', update));
-        }
-        parentEl.appendChild(row);
-      }
-    }
+    return;
   }
 
-  const tree = buildTree(filteredUniforms);
-  buildUI(tree, container);
-})();
+  for (let i = 0; i < spec.comps; i++) {
+    if (spec.kind === "bool") {
+      const cb = document.createElement("input");
+      setBoolInput(cb, () => value[i], (v) => {
+        value[i] = v;
+        write(value);
+      });
+      host.appendChild(cb);
+    } else {
+      const input = document.createElement("input");
+      setNumberInput(
+        input,
+        () => value[i],
+        (v) => {
+          value[i] = v;
+          write(value);
+        },
+        spec.kind === "int" || spec.kind === "uint",
+        spec.kind === "uint"
+      );
+      host.appendChild(input);
+    }
+  }
+};
+
+const root = { label: "", children: new Map() };
+
+for (const info of uniformList) {
+  const spec = specOf(info.type);
+  const base = info.size > 1 ? info.name.replace(/\[0\]$/, "") : info.name;
+  const tokens = [];
+  base.replace(/([^\.\[\]]+)|\[(\d+)\]/g, (_, a, b) => {
+    tokens.push(a !== undefined ? a : Number(b));
+    return "";
+  });
+  let node = root;
+  for (const token of tokens) {
+    if (!node.children.has(token)) node.children.set(token, { label: String(token), children: new Map() });
+    node = node.children.get(token);
+  }
+  node.uniform = {
+    key: info.name,
+    size: info.size,
+    spec
+  };
+  cube.material.uniforms[info.name] = { value: makeValue(spec, info.size) };
+}
+
+const renderNode = (node) => {
+  if (node.uniform) {
+    const u = node.uniform;
+    const box = document.createElement("div");
+    box.appendChild(document.createTextNode(node.label + " "));
+    const value = cube.material.uniforms[u.key].value;
+
+    if (u.size > 1 && u.spec.kind === "float" && u.spec.comps === 1) {
+      for (let i = 0; i < u.size; i++) {
+        const input = document.createElement("input");
+        setNumberInput(input, () => value[i], (v) => {
+          value[i] = v;
+          notify();
+        }, false, false);
+        box.appendChild(input);
+      }
+      return box;
+    }
+
+    if (u.size > 1) {
+      for (let i = 0; i < u.size; i++) {
+        const row = document.createElement("div");
+        row.appendChild(document.createTextNode("[" + i + "] "));
+        buildSingle(row, value[i], u.spec, (v) => {
+          value[i] = v;
+          notify();
+        });
+        box.appendChild(row);
+      }
+      return box;
+    }
+
+    buildSingle(box, value, u.spec, (v) => {
+      cube.material.uniforms[u.key].value = v;
+      notify();
+    });
+    return box;
+  }
+
+  const box = document.createElement("div");
+  if (node !== root) box.appendChild(document.createTextNode(node.label));
+  for (const child of node.children.values()) box.appendChild(renderNode(child));
+  return box;
+};
+
+uniformsHost.appendChild(renderNode(root));
 
 const controls = new OrbitControls(camera,renderer.domElement);
 const update = (time) => {
