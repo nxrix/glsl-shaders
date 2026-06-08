@@ -94,7 +94,7 @@ window.log = () => {
 
 const controls = new OrbitControls(camera,renderer.domElement);
 const update = (time) => {
-  material.uniforms.iTime.value = time*0.001;
+  cube.material.uniforms.iTime.value = time*0.001;
   renderer.render(scene,camera);
   requestAnimationFrame(update);
 }
