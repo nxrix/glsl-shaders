@@ -44,10 +44,16 @@ uniform float iTime;
 uniform float iA;
 uniform int iB;
 uniform vec3 iC;
-uniform mat4 iJ;
+struct light {
+  vec3 p;
+  float i;
+  float w[4];
+};
+uniform light iL;
+uniform light iLs[2];
 
 vec3 render(vec3 ro, vec3 rd) { 
-  return rd+iA+float(iB)+iC;
+  return rd+iA+float(iB)+iC+iL.p+ils[0].p;
 }
 `;
 
