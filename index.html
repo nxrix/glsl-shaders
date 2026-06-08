@@ -179,10 +179,10 @@ for (let i = 0; i < uniformCount; i++) {
     return parts;
   }
 
-  // Build tree from flat uniform list, expanding array sizes
+  // Build tree from flat uniform list, skipping iTime
+  const filteredUniforms = uniformList.filter(u => u.name !== 'iTime');
   function buildTree(uniforms) {
-    const root = { children: new Map(), isArray: false, typeInfo: null, uniformItem: null, arraySize: 1 };
-    // First pass: create nodes for existing uniforms
+    const root = { children: new Map() };
     for (const item of uniforms) {
       const path = parsePath(item.name);
       let node = root;
@@ -190,87 +190,59 @@ for (let i = 0; i < uniformCount; i++) {
         const seg = path[i];
         const isLast = (i === path.length-1);
         if (!node.children.has(seg)) {
-          const childNode = {
+          node.children.set(seg, {
             name: seg,
             children: new Map(),
-            isArray: (typeof seg === 'number'),
-            typeInfo: null,
             uniformItem: null,
+            typeInfo: null,
             parent: node,
-            arraySize: 1
-          };
-          node.children.set(seg, childNode);
+            arraySize: null
+          });
         }
         node = node.children.get(seg);
         if (isLast) {
           node.uniformItem = item;
           node.typeInfo = TYPE_MAP[item.type];
-          // For array elements, remember size and propagate upward
-          if (typeof seg === 'number') {
-            node.arraySize = item.size; // each element may have size>1? usually 1
-            // Tell parent that this is an array and set its size
-            if (node.parent && !node.parent.arraySize) {
-              node.parent.isArray = true;
-              node.parent.arraySize = item.size;
-            }
-          }
         }
       }
     }
-    // Second pass: for any array node that knows its size, ensure all indices 0..size-1 exist
-    function expandArrayNodes(node) {
-      if (node.isArray && node.arraySize > 1) {
-        for (let i = 0; i < node.arraySize; i++) {
-          if (!node.children.has(i)) {
-            // Create a placeholder child for missing index
-            const childNode = {
-              name: i,
-              children: new Map(),
-              isArray: false,
-              typeInfo: null,
-              uniformItem: null,
-              parent: node,
-              arraySize: 1
-            };
-            node.children.set(i, childNode);
-          }
+    // Detect array nodes: if a node's children are all numeric and have same typeInfo, and their parent has arraySize from uniform size
+    function markArrays(node) {
+      const childKeys = Array.from(node.children.keys());
+      const allNumeric = childKeys.every(k => typeof k === 'number');
+      if (allNumeric && childKeys.length > 0) {
+        // check if first child has uniformItem with size > 1 (array of primitives) or is struct
+        const firstChild = node.children.get(childKeys[0]);
+        if (firstChild.uniformItem && firstChild.uniformItem.size > 1) {
+          node.isArray = true;
+          node.arraySize = firstChild.uniformItem.size;
+          node.arrayTypeInfo = firstChild.typeInfo;
+        } else if (firstChild.children.size > 0) {
+          // array of structs: size is max index+1
+          const maxIdx = Math.max(...childKeys);
+          node.isArray = true;
+          node.arraySize = maxIdx + 1;
         }
       }
-      for (let child of node.children.values()) {
-        expandArrayNodes(child);
-      }
+      for (let child of node.children.values()) markArrays(child);
     }
-    expandArrayNodes(root);
+    markArrays(root);
     return root;
   }
 
   // Recursively create UI
   function buildUI(node, parentEl, path = []) {
-    // Sort children: numbers (indices) first then strings, numeric order
-    const sortedKeys = Array.from(node.children.keys()).sort((a,b) => {
-      if (typeof a === 'number' && typeof b === 'number') return a - b;
-      if (typeof a === 'number') return -1;
-      if (typeof b === 'number') return 1;
-      return String(a).localeCompare(String(b));
-    });
-
-    for (const key of sortedKeys) {
-      const child = node.children.get(key);
-      const fullPath = [...path, key];
-      const flatName = fullPath.join('.').replace(/\.(\d+)/g, '[$1]');
-      
-      // Skip iTime
-      if (flatName === 'iTime') continue;
-
-      const isArrayNode = child.isArray && child.arraySize > 1;
-      const isStructNode = !child.uniformItem && child.children.size > 0 && !isArrayNode;
-
-      if (isArrayNode) {
-        // Array of structs or primitives
+    // Sort children: indices first then strings, but for arrays we handle specially
+    const childEntries = Array.from(node.children.entries());
+    // Process array nodes first (they have isArray flag)
+    for (const [key, child] of childEntries) {
+      if (child.isArray) {
+        // Create collapsible section for the array
         const details = document.createElement('details');
         details.style.marginLeft = '1rem';
         const summary = document.createElement('summary');
-        summary.textContent = `${key} (array[${child.arraySize}])`;
+        const arrayName = key;
+        summary.textContent = `${arrayName} [${child.arraySize}]`;
         summary.style.fontWeight = 'bold';
         summary.style.cursor = 'pointer';
         details.appendChild(summary);
@@ -280,25 +252,106 @@ for (let i = 0; i < uniformCount; i++) {
         groupDiv.style.paddingLeft = '0.5rem';
         details.appendChild(groupDiv);
         parentEl.appendChild(details);
-        // For each index, create a sub-details
-        for (let idx = 0; idx < child.arraySize; idx++) {
-          const elemNode = child.children.get(idx);
-          if (!elemNode) continue;
-          const elemDetails = document.createElement('details');
-          elemDetails.style.marginLeft = '0.5rem';
-          const elemSummary = document.createElement('summary');
-          elemSummary.textContent = `[${idx}]`;
-          elemSummary.style.cursor = 'pointer';
-          elemDetails.appendChild(elemSummary);
-          const elemDiv = document.createElement('div');
-          elemDiv.style.marginLeft = '1rem';
-          elemDetails.appendChild(elemDiv);
-          groupDiv.appendChild(elemDetails);
-          buildUI(elemNode, elemDiv, [...fullPath, idx]);
+
+        // If this is an array of primitives (e.g., float w[4]), create a row of inputs per index
+        if (child.arrayTypeInfo && child.children.size === child.arraySize) {
+          // Array of scalar/vector: show all indices in one line per index?
+          // Better: show each index as a separate control, but not nested too deep.
+          for (let idx = 0; idx < child.arraySize; idx++) {
+            const elemNode = child.children.get(idx);
+            if (!elemNode || !elemNode.uniformItem) continue;
+            const flatName = [...path, key, idx].join('.').replace(/\.(\d+)/g, '[$1]');
+            const typeInfo = elemNode.typeInfo;
+            // Ensure uniform exists
+            if (!cube.material.uniforms[flatName]) {
+              let defaultValue = null;
+              if (typeInfo.ui === 'float') defaultValue = 0;
+              else if (typeInfo.ui === 'int') defaultValue = 0;
+              else if (typeInfo.ui === 'bool') defaultValue = false;
+              else if (typeInfo.ui === 'vec2') defaultValue = new THREE.Vector2();
+              else if (typeInfo.ui === 'vec3') defaultValue = new THREE.Vector3();
+              else defaultValue = null;
+              cube.material.uniforms[flatName] = { value: defaultValue };
+            }
+            const row = document.createElement('div');
+            row.style.marginBottom = '0.3rem';
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+            row.style.gap = '0.5rem';
+            const idxLabel = document.createElement('label');
+            idxLabel.textContent = `[${idx}]`;
+            idxLabel.style.fontFamily = 'monospace';
+            idxLabel.style.minWidth = '40px';
+            row.appendChild(idxLabel);
+            // Create input(s) for this primitive
+            const componentCount = { 'float':1, 'int':1, 'uint':1, 'bool':1,
+                                     'vec2':2, 'ivec2':2, 'uvec2':2, 'bvec2':2,
+                                     'vec3':3, 'ivec3':3, 'uvec3':3, 'bvec3':3,
+                                     'vec4':4, 'ivec4':4, 'uvec4':4, 'bvec4':4 }[typeInfo.ui] || 1;
+            const isBool = typeInfo.ui.startsWith('bvec') || typeInfo.ui === 'bool';
+            const inputs = [];
+            for (let i = 0; i < componentCount; i++) {
+              let inp;
+              if (isBool) {
+                inp = document.createElement('input');
+                inp.type = 'checkbox';
+                const cur = cube.material.uniforms[flatName].value;
+                if (componentCount === 1) inp.checked = cur;
+                else if (cur && cur[i] !== undefined) inp.checked = cur[i];
+              } else {
+                inp = document.createElement('input');
+                inp.type = 'number';
+                inp.step = typeInfo.ui.includes('int') ? '1' : 'any';
+                inp.style.width = '60px';
+                const cur = cube.material.uniforms[flatName].value;
+                if (componentCount === 1) inp.value = cur !== undefined ? cur : 0;
+                else if (cur && cur[i] !== undefined) inp.value = cur[i];
+                else inp.value = 0;
+              }
+              inputs.push(inp);
+              row.appendChild(inp);
+            }
+            const update = () => {
+              let newVal;
+              if (componentCount === 1) {
+                newVal = isBool ? inputs[0].checked : (typeInfo.ui.includes('int') ? parseInt(inputs[0].value,10) : parseFloat(inputs[0].value));
+              } else {
+                const arr = inputs.map(inp => isBool ? inp.checked : (typeInfo.ui.includes('int') ? parseInt(inp.value,10) : parseFloat(inp.value)));
+                newVal = typeInfo.ctor(arr);
+              }
+              cube.material.uniforms[flatName].value = newVal;
+            };
+            inputs.forEach(inp => inp.addEventListener('input', update));
+            groupDiv.appendChild(row);
+          }
+        } else {
+          // Array of structs: recursively build UI for each element
+          for (let idx = 0; idx < child.arraySize; idx++) {
+            const elemNode = child.children.get(idx);
+            if (!elemNode) continue;
+            const elemDetails = document.createElement('details');
+            elemDetails.style.marginLeft = '0.5rem';
+            const elemSummary = document.createElement('summary');
+            elemSummary.textContent = `[${idx}]`;
+            elemSummary.style.cursor = 'pointer';
+            elemDetails.appendChild(elemSummary);
+            const elemDiv = document.createElement('div');
+            elemDiv.style.marginLeft = '1rem';
+            elemDetails.appendChild(elemDiv);
+            groupDiv.appendChild(elemDetails);
+            buildUI(elemNode, elemDiv, [...path, key, idx]);
+          }
         }
-      } 
-      else if (isStructNode) {
-        // Struct (non-array object)
+      }
+    }
+    // Process non-array nodes (structs and leaf uniforms)
+    for (const [key, child] of childEntries) {
+      if (child.isArray) continue; // already processed
+      const fullPath = [...path, key];
+      const flatName = fullPath.join('.').replace(/\.(\d+)/g, '[$1]');
+      
+      if (child.children.size > 0 && !child.uniformItem) {
+        // Struct node
         const details = document.createElement('details');
         details.style.marginLeft = '1rem';
         const summary = document.createElement('summary');
@@ -313,68 +366,44 @@ for (let i = 0; i < uniformCount; i++) {
         details.appendChild(groupDiv);
         parentEl.appendChild(details);
         buildUI(child, groupDiv, fullPath);
-      }
-      else if (child.uniformItem || (child.children.size === 0 && child.typeInfo)) {
-        // Leaf uniform - generate input controls
-        // If it's an array element placeholder without explicit uniformItem, use parent's typeInfo
-        let typeInfo = child.typeInfo;
-        let item = child.uniformItem;
-        if (!typeInfo && child.parent && child.parent.typeInfo) {
-          // For array elements of primitive type (e.g., float w[4]), the typeInfo is on the parent array node
-          typeInfo = child.parent.typeInfo;
-          item = { name: flatName, type: Object.keys(TYPE_MAP).find(k => TYPE_MAP[k] === typeInfo) };
-        }
-        if (!typeInfo) {
-          console.warn(`No type info for ${flatName}`);
-          continue;
-        }
-
-        // Ensure uniform exists in material with default value
+      } else if (child.uniformItem) {
+        // Leaf uniform
+        const typeInfo = child.typeInfo;
+        if (!typeInfo) continue;
+        
+        // Ensure uniform exists
         if (!cube.material.uniforms[flatName]) {
           let defaultValue;
-          if (typeInfo.ui === 'texture') {
-            defaultValue = new THREE.Texture();
-          } else if (typeInfo.ui.startsWith('mat')) {
-            const size = typeInfo.rows * typeInfo.cols;
-            defaultValue = typeInfo.ctor(new Array(size).fill(0));
-          } else if (typeInfo.ui === 'vec2') defaultValue = new THREE.Vector2(0,0);
-          else if (typeInfo.ui === 'vec3') defaultValue = new THREE.Vector3(0,0,0);
-          else if (typeInfo.ui === 'vec4') defaultValue = new THREE.Vector4(0,0,0,0);
-          else if (typeInfo.ui === 'int' || typeInfo.ui === 'uint') defaultValue = 0;
-          else if (typeInfo.ui === 'float') defaultValue = 0.0;
+          if (typeInfo.ui === 'texture') defaultValue = new THREE.Texture();
+          else if (typeInfo.ui === 'float') defaultValue = 0;
+          else if (typeInfo.ui === 'int') defaultValue = 0;
+          else if (typeInfo.ui === 'uint') defaultValue = 0;
           else if (typeInfo.ui === 'bool') defaultValue = false;
-          else if (typeInfo.ui === 'ivec2') defaultValue = [0,0];
-          else if (typeInfo.ui === 'ivec3') defaultValue = [0,0,0];
-          else if (typeInfo.ui === 'ivec4') defaultValue = [0,0,0,0];
-          else if (typeInfo.ui === 'uvec2') defaultValue = [0,0];
-          else if (typeInfo.ui === 'uvec3') defaultValue = [0,0,0];
-          else if (typeInfo.ui === 'uvec4') defaultValue = [0,0,0,0];
-          else if (typeInfo.ui === 'bvec2') defaultValue = [false,false];
-          else if (typeInfo.ui === 'bvec3') defaultValue = [false,false,false];
-          else if (typeInfo.ui === 'bvec4') defaultValue = [false,false,false,false];
+          else if (typeInfo.ui === 'vec2') defaultValue = new THREE.Vector2();
+          else if (typeInfo.ui === 'vec3') defaultValue = new THREE.Vector3();
+          else if (typeInfo.ui === 'vec4') defaultValue = new THREE.Vector4();
+          else if (typeInfo.ui.startsWith('ivec')) defaultValue = [0,0,0,0].slice(0, typeInfo.ui === 'ivec2' ? 2 : typeInfo.ui === 'ivec3' ? 3 : 4);
+          else if (typeInfo.ui.startsWith('uvec')) defaultValue = [0,0,0,0].slice(0, typeInfo.ui === 'uvec2' ? 2 : typeInfo.ui === 'uvec3' ? 3 : 4);
+          else if (typeInfo.ui.startsWith('bvec')) defaultValue = [false,false,false,false].slice(0, typeInfo.ui === 'bvec2' ? 2 : typeInfo.ui === 'bvec3' ? 3 : 4);
+          else if (typeInfo.ui.startsWith('mat')) defaultValue = typeInfo.ctor(new Array(typeInfo.rows*typeInfo.cols).fill(0));
           else defaultValue = null;
           cube.material.uniforms[flatName] = { value: defaultValue };
         }
 
-        const controlRow = document.createElement('div');
-        controlRow.style.marginBottom = '0.5rem';
-        controlRow.style.display = 'flex';
-        controlRow.style.alignItems = 'center';
-        controlRow.style.flexWrap = 'wrap';
-        controlRow.style.gap = '0.5rem';
+        const row = document.createElement('div');
+        row.style.marginBottom = '0.5rem';
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.flexWrap = 'wrap';
+        row.style.gap = '0.5rem';
 
-        // Label with type hint for simple (non-struct) top-level uniforms
-        let labelText = flatName;
-        const isSimple = flatName.split('.').length === 1 && !flatName.includes('[');
-        if (isSimple && typeInfo.ui !== 'texture' && !typeInfo.ui.startsWith('mat')) {
-          labelText += ` (${typeInfo.ui})`;
-        }
+        const labelText = `${flatName} (${typeInfo.ui})`;
         const label = document.createElement('label');
         label.textContent = labelText;
         label.style.fontFamily = 'monospace';
         label.style.fontSize = '12px';
         label.style.minWidth = '150px';
-        controlRow.appendChild(label);
+        row.appendChild(label);
 
         if (typeInfo.ui === 'texture') {
           const fileInput = document.createElement('input');
@@ -392,9 +421,8 @@ for (let i = 0; i < uniformCount; i++) {
               img.src = URL.createObjectURL(file);
             }
           });
-          controlRow.appendChild(fileInput);
-        } 
-        else if (typeInfo.ui.startsWith('mat')) {
+          row.appendChild(fileInput);
+        } else if (typeInfo.ui.startsWith('mat')) {
           const rows = typeInfo.rows;
           const cols = typeInfo.cols;
           const table = document.createElement('table');
@@ -420,10 +448,8 @@ for (let i = 0; i < uniformCount; i++) {
             }
             table.appendChild(tr);
           }
-          controlRow.appendChild(table);
-        }
-        else {
-          // scalar or vector
+          row.appendChild(table);
+        } else {
           const componentCount = { 'float':1, 'int':1, 'uint':1, 'bool':1,
                                    'vec2':2, 'ivec2':2, 'uvec2':2, 'bvec2':2,
                                    'vec3':3, 'ivec3':3, 'uvec3':3, 'bvec3':3,
@@ -435,30 +461,23 @@ for (let i = 0; i < uniformCount; i++) {
             if (isBool) {
               inp = document.createElement('input');
               inp.type = 'checkbox';
-              const curVal = cube.material.uniforms[flatName].value;
-              if (curVal !== undefined && curVal !== null) {
-                if (componentCount === 1) inp.checked = curVal;
-                else if (curVal[i] !== undefined) inp.checked = curVal[i];
-              }
+              const cur = cube.material.uniforms[flatName].value;
+              if (componentCount === 1) inp.checked = cur;
+              else if (cur && cur[i] !== undefined) inp.checked = cur[i];
             } else {
               inp = document.createElement('input');
               inp.type = 'number';
               inp.step = typeInfo.ui.includes('int') ? '1' : 'any';
-              const curVal = cube.material.uniforms[flatName].value;
-              if (curVal !== undefined && curVal !== null) {
-                let val;
-                if (componentCount === 1) val = curVal;
-                else val = curVal[i] !== undefined ? curVal[i] : 0;
-                inp.value = val;
-              } else {
-                inp.value = '0';
-              }
+              inp.style.width = '60px';
+              const cur = cube.material.uniforms[flatName].value;
+              if (componentCount === 1) inp.value = cur !== undefined ? cur : 0;
+              else if (cur && cur[i] !== undefined) inp.value = cur[i];
+              else inp.value = 0;
             }
-            inp.style.width = '60px';
             inputs.push(inp);
-            controlRow.appendChild(inp);
+            row.appendChild(inp);
           }
-          const updateUniform = () => {
+          const update = () => {
             let newVal;
             if (componentCount === 1) {
               newVal = isBool ? inputs[0].checked : (typeInfo.ui.includes('int') ? parseInt(inputs[0].value,10) : parseFloat(inputs[0].value));
@@ -468,14 +487,14 @@ for (let i = 0; i < uniformCount; i++) {
             }
             cube.material.uniforms[flatName].value = newVal;
           };
-          inputs.forEach(inp => inp.addEventListener('input', updateUniform));
+          inputs.forEach(inp => inp.addEventListener('input', update));
         }
-        parentEl.appendChild(controlRow);
+        parentEl.appendChild(row);
       }
     }
   }
 
-  const tree = buildTree(uniformList);
+  const tree = buildTree(filteredUniforms);
   buildUI(tree, container);
 })();
 
