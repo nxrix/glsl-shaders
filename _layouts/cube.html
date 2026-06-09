@@ -107,9 +107,9 @@ console.log(uniformList);
 
 const TYPES = {
    5126: { name:     "float", size:  1, init: () => 0, inputs: 1, step: 0.01 },
-  35664: { name:      "vec2", size:  2, init: () => new THREE.Vector2(), inputs: 2, step: 0.01 },
-  35665: { name:      "vec3", size:  3, init: () => new THREE.Vector3(), inputs: 3, step: 0.01 },
-  35666: { name:      "vec4", size:  4, init: () => new THREE.Vector4(), inputs: 4, step: 0.01 },
+  35664: { name:      "vec2", size:  2, init: () => new THREE.Vector2(0,0), inputs: 2, step: 0.01 },
+  35665: { name:      "vec3", size:  3, init: () => new THREE.Vector3(0,0,0), inputs: 3, step: 0.01 },
+  35666: { name:      "vec4", size:  4, init: () => new THREE.Vector4(0,0,0,0), inputs: 4, step: 0.01 },
    5124: { name:       "int", size:  1, init: () => 0, inputs: 1, step: 1 },
   35667: { name:     "ivec2", size:  2, init: () => [0, 0], inputs: 2, step: 1 },
   35668: { name:     "ivec3", size:  3, init: () => [0, 0, 0], inputs: 3, step: 1 },
