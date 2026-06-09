@@ -24,6 +24,9 @@ layout: default
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
+// Load configuration from Jekyll front matter
+const yamlUniforms = {% if page.uniforms %}{{ page.uniforms | jsonify }}{% else %}{}{% endif %};
+
 canvas.width = canvas.height = 512;
 
 const renderer = new THREE.WebGLRenderer({ canvas, context: canvas.getContext("webgl2",{ antialias: false, preserveDrawingBuffer: true }) });
@@ -109,8 +112,6 @@ for (let i = 0; i < uniformCount; i++) {
   });
 }
 
-console.log(uniformList);
-
 const TYPES = {
    5126: { name:     "float", size:  1, init: () => 0, inputs: 1, step: 0.01 },
   35664: { name:      "vec2", size:  2, init: () => new THREE.Vector2(0,0), inputs: 2, step: 0.01 },
@@ -180,17 +181,157 @@ const getThreePath = (path) => {
   return threePath;
 };
 
-const getInitVal = (type, size) => {
-  const t = TYPES[type];
-  if (!t) return 0;
-  if (size > 1) {
-    const arr = [];
-    for (let i = 0; i < size; i++) {
-      arr.push(t.init());
+// Traverses front-matter configuration using numerical index overrides and fallbacks
+const getYamlNode = (path) => {
+  if (!yamlUniforms) return null;
+  let curr = yamlUniforms;
+  for (let i = 0; i < path.length; i++) {
+    const key = path[i];
+    if (curr === null || curr === undefined || typeof curr !== "object") {
+      return null;
+    }
+    if (typeof key === "number") {
+      // Look for explicit index array override
+      if (curr[key] !== undefined) {
+        curr = curr[key];
+      } else if (curr[key.toString()] !== undefined) {
+        curr = curr[key.toString()];
+      } else {
+        // Fallback: skip indexing and look for properties directly on the parent
+        continue;
+      }
+    } else {
+      if (curr[key] !== undefined) {
+        curr = curr[key];
+      } else {
+        return null;
+      }
+    }
+  }
+  return curr;
+};
+
+// Extracts metadata values for multidimensional array dimensions and vectors/matrices
+const extractScalar = (val, N, C, arrayIndex, componentIndex) => {
+  if (val === undefined || val === null) return undefined;
+  if (!Array.isArray(val)) return val;
+
+  // Handle nested arrays (e.g. [[1, 2, 3], [4, 5, 6]])
+  if (Array.isArray(val[0])) {
+    const arr = val[arrayIndex % val.length];
+    if (Array.isArray(arr)) {
+      return arr[componentIndex % arr.length];
     }
     return arr;
   }
-  return t.init();
+
+  // Handle flat arrays based on layout type context
+  if (N > 1 && C > 1) {
+    if (val.length === N * C) return val[arrayIndex * C + componentIndex];
+    if (val.length === C) return val[componentIndex];
+    if (val.length === N) return val[arrayIndex];
+    return val[(arrayIndex * C + componentIndex) % val.length];
+  } else if (N > 1) {
+    return val[arrayIndex % val.length];
+  } else if (C > 1) {
+    return val[componentIndex % val.length];
+  }
+  return val[0];
+};
+
+const resolveField = (metaObj, fieldName, arrayIndex, componentIndex, totalComponents, defaultValue, size) => {
+  if (!metaObj) return defaultValue;
+  let val = metaObj[fieldName];
+  if (val === undefined && fieldName === "value") {
+    // Graceful recovery for typos like "valie"
+    val = metaObj["valie"];
+  }
+  if (val === undefined) {
+    return defaultValue;
+  }
+  const N = size || 1;
+  const C = totalComponents;
+  const res = extractScalar(val, N, C, arrayIndex, componentIndex);
+  return res !== undefined ? res : defaultValue;
+};
+
+const getInitialValueForUniform = (path, item) => {
+  const typeInfo = TYPES[item.type];
+  if (!typeInfo) return 0;
+  
+  const N = item.size;
+  const C = typeInfo.inputs || 1;
+  const yamlNode = getYamlNode(path);
+  
+  const resolveScalar = (arrIdx, compIdx, def) => {
+    return resolveField(yamlNode, "value", arrIdx, compIdx, C, def, N);
+  };
+
+  const buildElement = (arrIdx) => {
+    if (item.type === 35678) { // sampler2D
+      return typeInfo.init();
+    }
+    if (typeInfo.name === "float" || typeInfo.name === "int" || typeInfo.name === "uint") {
+      return resolveScalar(arrIdx, 0, 0);
+    }
+    if (typeInfo.name === "bool") {
+      return resolveScalar(arrIdx, 0, false);
+    }
+    if (typeInfo.name.startsWith("vec")) {
+      const coords = [];
+      for (let c = 0; c < C; c++) {
+        coords.push(resolveScalar(arrIdx, c, 0));
+      }
+      if (typeInfo.name === "vec2") return new THREE.Vector2(coords[0], coords[1]);
+      if (typeInfo.name === "vec3") return new THREE.Vector3(coords[0], coords[1], coords[2]);
+      if (typeInfo.name === "vec4") return new THREE.Vector4(coords[0], coords[1], coords[2], coords[3]);
+    }
+    if (typeInfo.name.startsWith("ivec") || typeInfo.name.startsWith("uvec")) {
+      const coords = [];
+      for (let c = 0; c < C; c++) {
+        coords.push(resolveScalar(arrIdx, c, 0));
+      }
+      return coords;
+    }
+    if (typeInfo.name.startsWith("bvec")) {
+      const coords = [];
+      for (let c = 0; c < C; c++) {
+        coords.push(resolveScalar(arrIdx, c, false));
+      }
+      return coords;
+    }
+    if (typeInfo.name.startsWith("mat")) {
+      const total = typeInfo.cols * typeInfo.rows;
+      const elements = [];
+      for (let c = 0; c < total; c++) {
+        const isIdentityIndex = (c % (typeInfo.cols + 1) === 0);
+        const defVal = (typeInfo.name.startsWith("mat") && !typeInfo.name.includes("x") && isIdentityIndex) ? 1 : 0;
+        elements.push(resolveScalar(arrIdx, c, defVal));
+      }
+      if (typeInfo.name === "mat3") {
+        const m = new THREE.Matrix3();
+        m.set(...elements);
+        return m;
+      }
+      if (typeInfo.name === "mat4") {
+        const m = new THREE.Matrix4();
+        m.set(...elements);
+        return m;
+      }
+      return new Float32Array(elements);
+    }
+    return typeInfo.init();
+  };
+  
+  if (N > 1) {
+    const arr = [];
+    for (let s = 0; s < N; s++) {
+      arr.push(buildElement(s));
+    }
+    return arr;
+  } else {
+    return buildElement(0);
+  }
 };
 
 const setPathValue = (obj, path, val) => {
@@ -210,28 +351,47 @@ const getPathValue = (obj, path) => {
   return path.reduce((curr, key) => curr[key], obj);
 };
 
-const updateUniformValue = (threePath, componentIndex, val) => {
+const updateUniformValue = (threePath, arrayIndex, componentIndex, val) => {
   const parentPath = threePath.slice(0, -1);
   const lastKey = threePath[threePath.length - 1];
   const parentObj = getPathValue(cube.material.uniforms, parentPath);
-  const target = parentObj[lastKey];
-  if (target instanceof THREE.Vector2 || target instanceof THREE.Vector3 || target instanceof THREE.Vector4) {
-    target.setComponent(componentIndex, val);
-  } else if (target instanceof THREE.Matrix3 || target instanceof THREE.Matrix4) {
-    target.elements[componentIndex] = val;
-  } else if (Array.isArray(target) || ArrayBuffer.isView(target)) {
-    target[componentIndex] = val;
+  let target = parentObj[lastKey];
+  
+  if (Array.isArray(target) && target.length > 0) {
+    const firstElem = target[0];
+    const isPrimitiveArray = (typeof firstElem === "number" || typeof firstElem === "boolean" || Array.isArray(firstElem));
+    if (isPrimitiveArray) {
+      if (Array.isArray(firstElem)) {
+        target[arrayIndex][componentIndex] = val;
+      } else {
+        target[arrayIndex] = val;
+      }
+    } else {
+      const obj = target[arrayIndex];
+      if (obj instanceof THREE.Vector2 || obj instanceof THREE.Vector3 || obj instanceof THREE.Vector4) {
+        obj.setComponent(componentIndex, val);
+      } else if (obj instanceof THREE.Matrix3 || obj instanceof THREE.Matrix4) {
+        obj.elements[componentIndex] = val;
+      }
+    }
   } else {
-    parentObj[lastKey] = val;
+    if (target instanceof THREE.Vector2 || target instanceof THREE.Vector3 || target instanceof THREE.Vector4) {
+      target.setComponent(componentIndex, val);
+    } else if (target instanceof THREE.Matrix3 || target instanceof THREE.Matrix4) {
+      target.elements[componentIndex] = val;
+    } else if (Array.isArray(target) || ArrayBuffer.isView(target)) {
+      target[componentIndex] = val;
+    } else {
+      parentObj[lastKey] = val;
+    }
   }
-  //cube.material.uniformsNeedUpdate = true;
 };
 
 const tree = {};
 uniformList.forEach(item => {
   const path = parsePath(item.name, item.size);
   const threePath = getThreePath(path);
-  setPathValue(cube.material.uniforms, threePath, getInitVal(item.type, item.size));
+  setPathValue(cube.material.uniforms, threePath, getInitialValueForUniform(path, item));
   let curr = tree;
   path.forEach((key, idx) => {
     const isLast = idx === path.length - 1;
@@ -244,14 +404,68 @@ uniformList.forEach(item => {
   });
 });
 
+const createNumberControl = (initialVal, minVal, maxVal, stepVal, isRange, onChange) => {
+  const container = document.createElement("div");
+  container.style.display = "flex";
+  container.style.alignItems = "center";
+  container.style.gap = "8px";
+  container.style.width = "100%";
+  container.style.maxWidth = "300px";
+  
+  const numInput = document.createElement("input");
+  numInput.type = "number";
+  numInput.step = stepVal;
+  if (minVal !== undefined) numInput.min = minVal;
+  if (maxVal !== undefined) numInput.max = maxVal;
+  numInput.value = initialVal;
+  numInput.style.width = "65px";
+  numInput.style.padding = "3px";
+  numInput.style.border = "1px solid #ccc";
+  numInput.style.borderRadius = "3px";
+  
+  if (isRange) {
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = minVal;
+    slider.max = maxVal;
+    slider.step = stepVal;
+    slider.value = initialVal;
+    slider.style.flex = "1";
+    slider.style.minWidth = "100px";
+    slider.style.cursor = "pointer";
+    
+    slider.addEventListener("input", (e) => {
+      numInput.value = e.target.value;
+      onChange(parseFloat(e.target.value) || 0);
+    });
+    
+    numInput.addEventListener("input", (e) => {
+      slider.value = e.target.value;
+      onChange(parseFloat(e.target.value) || 0);
+    });
+    
+    container.appendChild(slider);
+    container.appendChild(numInput);
+  } else {
+    numInput.addEventListener("input", (e) => {
+      onChange(parseFloat(e.target.value) || 0);
+    });
+    container.appendChild(numInput);
+  }
+  return container;
+};
+
 const renderLeaf = (item, path, container) => {
   const typeInfo = TYPES[item.type];
   if (!typeInfo) return;
+  
   const renderSingle = (indexOffset, labelText, containerEl) => {
     const wrapper = document.createElement("div");
-    wrapper.style.margin = "2px 0";
+    wrapper.style.margin = "4px 0";
     wrapper.style.display = "flex";
     wrapper.style.flexDirection = "column";
+    wrapper.style.gap = "2px";
+    
     if (labelText) {
       const label = document.createElement("label");
       label.textContent = labelText;
@@ -259,10 +473,19 @@ const renderLeaf = (item, path, container) => {
       label.style.fontSize = "12px";
       wrapper.appendChild(label);
     }
+    
     const inputRow = document.createElement("div");
     inputRow.style.display = "flex";
     inputRow.style.gap = "4px";
+    inputRow.style.flexDirection = "column";
+    
     const threePath = getThreePath(path);
+    const yamlNode = getYamlNode(path);
+    
+    const getMetaValue = (fieldName, arrayIndex, componentIndex, defaultValue) => {
+      return resolveField(yamlNode, fieldName, arrayIndex, componentIndex, typeInfo.inputs || 1, defaultValue, item.size);
+    };
+    
     if (typeInfo.type === "file") {
       const input = document.createElement("input");
       input.type = "file";
@@ -276,7 +499,7 @@ const renderLeaf = (item, path, container) => {
             img.onload = () => {
               const tex = new THREE.Texture(img);
               tex.needsUpdate = true;
-              updateUniformValue(threePath, indexOffset, tex);
+              updateUniformValue(threePath, indexOffset, 0, tex);
             };
             img.src = event.target.result;
           };
@@ -286,52 +509,72 @@ const renderLeaf = (item, path, container) => {
       inputRow.appendChild(input);
     } else if (typeInfo.type === "checkbox") {
       const count = typeInfo.inputs;
+      const checkRow = document.createElement("div");
+      checkRow.style.display = "flex";
+      checkRow.style.gap = "4px";
       for (let i = 0; i < count; i++) {
         const input = document.createElement("input");
         input.type = "checkbox";
+        const initVal = getMetaValue("value", indexOffset, i, false);
+        input.checked = initVal;
         input.addEventListener("change", (e) => {
-          updateUniformValue(threePath, indexOffset + i, e.target.checked);
+          updateUniformValue(threePath, indexOffset, i, e.target.checked);
         });
-        inputRow.appendChild(input);
+        checkRow.appendChild(input);
       }
+      inputRow.appendChild(checkRow);
     } else if (typeInfo.cols && typeInfo.rows) {
       const grid = document.createElement("div");
       grid.style.display = "grid";
-      grid.style.gridTemplateColumns = "repeat(" + typeInfo.cols + ", 50px)";
+      grid.style.gridTemplateColumns = "repeat(" + typeInfo.cols + ", 1fr)";
       grid.style.gap = "4px";
       const total = typeInfo.cols * typeInfo.rows;
       for (let i = 0; i < total; i++) {
-        const input = document.createElement("input");
-        input.type = "number";
-        input.step = typeInfo.step;
-        input.style.width = "100%";
         const isIdentityIndex = (i % (typeInfo.cols + 1) === 0);
-        input.value = (typeInfo.name.startsWith("mat") && !typeInfo.name.includes("x") && isIdentityIndex) ? 1 : 0;
-        input.addEventListener("input", (e) => {
-          updateUniformValue(threePath, indexOffset + i, parseFloat(e.target.value) || 0);
+        const defVal = (typeInfo.name.startsWith("mat") && !typeInfo.name.includes("x") && isIdentityIndex) ? 1 : 0;
+        
+        const initVal = getMetaValue("value", indexOffset, i, defVal);
+        const minVal = getMetaValue("min", indexOffset, i, undefined);
+        const maxVal = getMetaValue("max", indexOffset, i, undefined);
+        const stepVal = getMetaValue("step", indexOffset, i, typeInfo.step || 0.01);
+        const isRange = getMetaValue("range", indexOffset, i, false);
+        
+        const resolvedMin = minVal !== undefined ? minVal : 0;
+        const resolvedMax = maxVal !== undefined ? maxVal : Math.max(1.0, initVal * 2);
+        
+        const control = createNumberControl(initVal, resolvedMin, resolvedMax, stepVal, isRange, (val) => {
+          updateUniformValue(threePath, indexOffset, i, val);
         });
-        grid.appendChild(input);
+        grid.appendChild(control);
       }
       inputRow.appendChild(grid);
     } else {
       const count = typeInfo.inputs;
+      const numCol = document.createElement("div");
+      numCol.style.display = "flex";
+      numCol.style.flexDirection = "column";
+      numCol.style.gap = "4px";
       for (let i = 0; i < count; i++) {
-        const input = document.createElement("input");
-        input.type = "number";
-        input.step = typeInfo.step;
-        if (typeInfo.min !== undefined) input.min = typeInfo.min;
-        input.style.width = "60px";
-        input.value = 0;
-        input.addEventListener("input", (e) => {
-          const val = typeInfo.step === 1 ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
-          updateUniformValue(threePath, indexOffset * count + i, val || 0);
+        const initVal = getMetaValue("value", indexOffset, i, 0);
+        const minVal = getMetaValue("min", indexOffset, i, undefined);
+        const maxVal = getMetaValue("max", indexOffset, i, undefined);
+        const stepVal = getMetaValue("step", indexOffset, i, typeInfo.step || 0.01);
+        const isRange = getMetaValue("range", indexOffset, i, false);
+        
+        const resolvedMin = minVal !== undefined ? minVal : 0;
+        const resolvedMax = maxVal !== undefined ? maxVal : Math.max(1.0, initVal * 2);
+        
+        const control = createNumberControl(initVal, resolvedMin, resolvedMax, stepVal, isRange, (val) => {
+          updateUniformValue(threePath, indexOffset, i, val);
         });
-        inputRow.appendChild(input);
+        numCol.appendChild(control);
       }
+      inputRow.appendChild(numCol);
     }
     wrapper.appendChild(inputRow);
     containerEl.appendChild(wrapper);
   };
+  
   const leafLabel = path[path.length - 1];
   if (item.size > 1) {
     const group = document.createElement("div");
