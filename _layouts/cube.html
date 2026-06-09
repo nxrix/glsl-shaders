@@ -242,10 +242,6 @@ const extractScalar = (val, N, C, arrayIndex, componentIndex) => {
 const resolveField = (metaObj, fieldName, arrayIndex, componentIndex, totalComponents, defaultValue, size) => {
   if (!metaObj) return defaultValue;
   let val = metaObj[fieldName];
-  if (val === undefined && fieldName === "value") {
-    // Graceful recovery for typos like "valie"
-    val = metaObj["valie"];
-  }
   if (val === undefined) {
     return defaultValue;
   }
@@ -419,9 +415,8 @@ const createNumberControl = (initialVal, minVal, maxVal, stepVal, isRange, onCha
   if (maxVal !== undefined) numInput.max = maxVal;
   numInput.value = initialVal;
   numInput.style.width = "65px";
-  numInput.style.padding = "3px";
-  numInput.style.border = "1px solid #ccc";
-  numInput.style.borderRadius = "3px";
+  numInput.style.textAlign = "center";
+  container.appendChild(numInput);
   
   if (isRange) {
     const slider = document.createElement("input");
@@ -432,7 +427,6 @@ const createNumberControl = (initialVal, minVal, maxVal, stepVal, isRange, onCha
     slider.value = initialVal;
     slider.style.flex = "1";
     slider.style.minWidth = "100px";
-    slider.style.cursor = "pointer";
     
     slider.addEventListener("input", (e) => {
       numInput.value = e.target.value;
@@ -441,16 +435,14 @@ const createNumberControl = (initialVal, minVal, maxVal, stepVal, isRange, onCha
     
     numInput.addEventListener("input", (e) => {
       slider.value = e.target.value;
-      onChange(parseFloat(e.target.value) || 0);
+      onChange(Math.min(Math.max(parseFloat(e.target.value) || 0,minVal),maxVal));
     });
     
     container.appendChild(slider);
-    container.appendChild(numInput);
   } else {
     numInput.addEventListener("input", (e) => {
-      onChange(parseFloat(e.target.value) || 0);
+      onChange(Math.min(Math.max(parseFloat(e.target.value) || 0,minVal),maxVal));
     });
-    container.appendChild(numInput);
   }
   return container;
 };
