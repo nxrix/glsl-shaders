@@ -52,12 +52,13 @@ vec4 pow2(vec4 a) {
 
 // inaccurate but fast
 float f(vec3 p) {
+  vec4 c,z;
   if (iJ) {
-    vec4 c = s(iC);
-    vec4 z = s(vec4(p,0));
+    c = s(iC);
+    z = s(vec4(p,0));
   } else {
-    vec4 c = s(vec4(p,0));
-    vec4 z = vec4(0);
+    c = s(vec4(p,0));
+    z = vec4(0);
   }
   float d = 1.0;
   for (int i=0;i<MAX_ITER;i++) {
