@@ -4,12 +4,14 @@ layout: default
 
 <canvas id="canvas"></canvas>
 <div id="uniforms"></div>
+{% if page.highlight %}
 {% capture shader_code %}
 ```glsl
 {{ content }}
 ```
 {% endcapture %}
 {{ shader_code | markdownify }}
+{% endif %}
 
 <script type="importmap">
   {
@@ -31,10 +33,10 @@ canvas.width = canvas.height = 512;
 
 const renderer = new THREE.WebGLRenderer({ canvas, context: canvas.getContext("webgl2",{ antialias: false, preserveDrawingBuffer: true }) });
 renderer.setSize(canvas.width,canvas.height,true);
-renderer.setPixelRatio(1);
+renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
-const camera = new THREE.PerspectiveCamera(90,canvas.width/canvas.height,0.125,256);
+const camera = new THREE.PerspectiveCamera(45,canvas.width/canvas.height,0.125,256);
 camera.position.set(0,0,4);
 const scene = new THREE.Scene();
 
