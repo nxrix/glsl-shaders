@@ -1,0 +1,388 @@
+---
+layout: default
+---
+
+<canvas id="canvas"></canvas>
+<div id="uniforms"></div>
+
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+    }
+  }
+</script>
+<script type="module">
+
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+canvas.width = canvas.height = 512;
+
+const renderer = new THREE.WebGLRenderer({ canvas, context: canvas.getContext("webgl2",{ antialias: false, preserveDrawingBuffer: true }) });
+renderer.setSize(canvas.width,canvas.height,true);
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+
+const camera = new THREE.PerspectiveCamera(90,canvas.width/canvas.height,0.125,256);
+camera.position.set(0,0,4);
+const scene = new THREE.Scene();
+
+const vs = `
+varying vec3 vP;
+varying vec3 vW;
+varying vec3 vN;
+void main() {
+  vP = position;
+  vN = normal;
+  vW = (modelMatrix*vec4(position,1)).xyz;
+  gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1);
+}`;
+
+const glsl = `
+uniform float iTime;
+{{ content }}
+`;
+
+const fs = `
+varying vec3 vP;
+varying vec3 vW;
+varying vec3 vN;
+${glsl}
+void main() {
+  vec3 ro = cameraPosition;
+  vec3 rd = normalize(vW-ro);
+  mainCube(gl_FragColor,ro,rd);
+}`;
+
+const cube = new THREE.Mesh(
+  new THREE.BoxGeometry(2,2,2),
+  new THREE.ShaderMaterial({
+    vertexShader: vs,
+    fragmentShader: fs,
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      iTime: { value: 0 }
+    }
+  })
+);
+scene.add(cube);
+
+const gl = renderer.getContext();
+
+const vss = gl.createShader(gl.VERTEX_SHADER);
+gl.shaderSource(vss,"#version 300 es\nvoid main() { gl_Position = vec4(0); }");
+gl.compileShader(vss);
+  
+const fss = gl.createShader(gl.FRAGMENT_SHADER);
+gl.shaderSource(fss,`#version 300 es
+  precision highp float;
+  ${glsl}
+  out vec4 fragColor;
+  void main() {
+    mainCube(fragColor,vec3(0),vec3(0));
+  }
+`);
+gl.compileShader(fss);
+
+const program = gl.createProgram();
+gl.attachShader(program,vss);
+gl.attachShader(program,fss);
+gl.linkProgram(program);
+
+const uniformCount = gl.getProgramParameter(program,gl.ACTIVE_UNIFORMS);
+const uniformList = [];
+for (let i = 0; i < uniformCount; i++) {
+  const info = gl.getActiveUniform(program,i);
+  uniformList.push({
+    name: info.name,
+    type: info.type,
+    size: info.size
+  });
+}
+
+console.log(uniformList);
+
+const TYPES = {
+   5126: { name:     "float", size:  1, init: () => 0, inputs: 1, step: 0.01 },
+  35664: { name:      "vec2", size:  2, init: () => new THREE.Vector2(), inputs: 2, step: 0.01 },
+  35665: { name:      "vec3", size:  3, init: () => new THREE.Vector3(), inputs: 3, step: 0.01 },
+  35666: { name:      "vec4", size:  4, init: () => new THREE.Vector4(), inputs: 4, step: 0.01 },
+   5124: { name:       "int", size:  1, init: () => 0, inputs: 1, step: 1 },
+  35667: { name:     "ivec2", size:  2, init: () => [0, 0], inputs: 2, step: 1 },
+  35668: { name:     "ivec3", size:  3, init: () => [0, 0, 0], inputs: 3, step: 1 },
+  35669: { name:     "ivec4", size:  4, init: () => [0, 0, 0, 0], inputs: 4, step: 1 },
+   5125: { name:      "uint", size:  1, init: () => 0, inputs: 1, step: 1, min: 0 },
+  36294: { name:     "uvec2", size:  2, init: () => [0, 0], inputs: 2, step: 1, min: 0 },
+  36295: { name:     "uvec3", size:  3, init: () => [0, 0, 0], inputs: 3, step: 1, min: 0 },
+  36296: { name:     "uvec4", size:  4, init: () => [0, 0, 0, 0], inputs: 4, step: 1, min: 0 },
+  35670: { name:      "bool", size:  1, init: () => false, inputs: 1, type: "checkbox" },
+  35671: { name:     "bvec2", size:  2, init: () => [false, false], inputs: 2, type: "checkbox" },
+  35672: { name:     "bvec3", size:  3, init: () => [false, false, false], inputs: 3, type: "checkbox" },
+  35673: { name:     "bvec4", size:  4, init: () => [false, false, false], inputs: 4, type: "checkbox" },
+  35674: { name:      "mat2", size:  4, init: () => [1, 0, 0, 1], inputs: 4, cols: 2, rows: 2, step: 0.01 },
+  35675: { name:      "mat3", size:  9, init: () => new THREE.Matrix3(), inputs: 9, cols: 3, rows: 3, step: 0.01 },
+  35676: { name:      "mat4", size: 16, init: () => new THREE.Matrix4(), inputs: 16, cols: 4, rows: 4, step: 0.01 },
+  35685: { name:    "mat2x3", size:  6, init: () => new Float32Array(6), inputs: 6, cols: 2, rows: 3, step: 0.01 },
+  35686: { name:    "mat2x4", size:  8, init: () => new Float32Array(8), inputs: 8, cols: 2, rows: 4, step: 0.01 },
+  35687: { name:    "mat3x2", size:  6, init: () => new Float32Array(6), inputs: 6, cols: 3, rows: 2, step: 0.01 },
+  35688: { name:    "mat3x4", size: 12, init: () => new Float32Array(12), inputs: 12, cols: 3, rows: 4, step: 0.01 },
+  35689: { name:    "mat4x2", size:  8, init: () => new Float32Array(8), inputs: 8, cols: 4, rows: 2, step: 0.01 },
+  35690: { name:    "mat4x3", size: 12, init: () => new Float32Array(12), inputs: 12, cols: 4, rows: 3, step: 0.01 },
+  35678: { name: "sampler2D", size:  1, init: () => new THREE.Texture(), type: "file" }
+};
+
+uniformList.sort((a, b) => {
+  const getPos = (name) => {
+    const parts = name.split(".");
+    const base = parts[0].split("[")[0];
+    const baseIdx = glsl.search(new RegExp("\\b" + base + "\\b"));
+    if (parts.length > 1) {
+      const field = parts[1].split("[")[0];
+      const fieldIdx = glsl.indexOf(field);
+      return baseIdx + fieldIdx * 1e-6;
+    }
+    return baseIdx;
+  };
+  return getPos(a.name) - getPos(b.name);
+});
+
+const parsePath = (name, size) => {
+  const parts = name.split(".");
+  const path = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const match = part.match(/^(\w+)(?:\[(\d+)\])?$/);
+    if (match) {
+      path.push(match[1]);
+      if (match[2] !== undefined) {
+        if (i === parts.length - 1 && size > 1) {
+        } else {
+          path.push(parseInt(match[2], 10));
+        }
+      }
+    }
+  }
+  return path;
+};
+
+const getThreePath = (path) => {
+  const threePath = [...path];
+  threePath.splice(1, 0, "value");
+  return threePath;
+};
+
+const getInitVal = (type, size) => {
+  const t = TYPES[type];
+  if (!t) return 0;
+  if (size > 1) {
+    const arr = [];
+    for (let i = 0; i < size; i++) {
+      arr.push(t.init());
+    }
+    return arr;
+  }
+  return t.init();
+};
+
+const setPathValue = (obj, path, val) => {
+  let curr = obj;
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = path[i];
+    const nextKey = path[i + 1];
+    if (curr[key] === undefined) {
+      curr[key] = (typeof nextKey === "number") ? [] : {};
+    }
+    curr = curr[key];
+  }
+  curr[path[path.length - 1]] = val;
+};
+
+const getPathValue = (obj, path) => {
+  return path.reduce((curr, key) => curr[key], obj);
+};
+
+const updateUniformValue = (threePath, componentIndex, val) => {
+  const parentPath = threePath.slice(0, -1);
+  const lastKey = threePath[threePath.length - 1];
+  const parentObj = getPathValue(cube.material.uniforms, parentPath);
+  const target = parentObj[lastKey];
+  if (target instanceof THREE.Vector2 || target instanceof THREE.Vector3 || target instanceof THREE.Vector4) {
+    target.setComponent(componentIndex, val);
+  } else if (target instanceof THREE.Matrix3 || target instanceof THREE.Matrix4) {
+    target.elements[componentIndex] = val;
+  } else if (Array.isArray(target) || ArrayBuffer.isView(target)) {
+    target[componentIndex] = val;
+  } else {
+    parentObj[lastKey] = val;
+  }
+  //cube.material.uniformsNeedUpdate = true;
+};
+
+const tree = {};
+uniformList.forEach(item => {
+  const path = parsePath(item.name, item.size);
+  const threePath = getThreePath(path);
+  setPathValue(cube.material.uniforms, threePath, getInitVal(item.type, item.size));
+  let curr = tree;
+  path.forEach((key, idx) => {
+    const isLast = idx === path.length - 1;
+    if (!curr[key]) {
+      curr[key] = isLast ? { isLeaf: true, item, path } : { children: {} };
+    }
+    if (!isLast) {
+      curr = curr[key].children;
+    }
+  });
+});
+
+const renderLeaf = (item, path, container) => {
+  const typeInfo = TYPES[item.type];
+  if (!typeInfo) return;
+  const renderSingle = (indexOffset, labelText, containerEl) => {
+    const wrapper = document.createElement("div");
+    wrapper.style.margin = "2px 0";
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    if (labelText) {
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      label.style.fontWeight = "bold";
+      label.style.fontSize = "12px";
+      wrapper.appendChild(label);
+    }
+    const inputRow = document.createElement("div");
+    inputRow.style.display = "flex";
+    inputRow.style.gap = "4px";
+    const threePath = getThreePath(path);
+    if (typeInfo.type === "file") {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+              const tex = new THREE.Texture(img);
+              tex.needsUpdate = true;
+              updateUniformValue(threePath, indexOffset, tex);
+            };
+            img.src = event.target.result;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+      inputRow.appendChild(input);
+    } else if (typeInfo.type === "checkbox") {
+      const count = typeInfo.inputs;
+      for (let i = 0; i < count; i++) {
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.addEventListener("change", (e) => {
+          updateUniformValue(threePath, indexOffset + i, e.target.checked);
+        });
+        inputRow.appendChild(input);
+      }
+    } else if (typeInfo.cols && typeInfo.rows) {
+      const grid = document.createElement("div");
+      grid.style.display = "grid";
+      grid.style.gridTemplateColumns = "repeat(" + typeInfo.cols + ", 50px)";
+      grid.style.gap = "4px";
+      const total = typeInfo.cols * typeInfo.rows;
+      for (let i = 0; i < total; i++) {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.step = typeInfo.step;
+        input.style.width = "100%";
+        const isIdentityIndex = (i % (typeInfo.cols + 1) === 0);
+        input.value = (typeInfo.name.startsWith("mat") && !typeInfo.name.includes("x") && isIdentityIndex) ? 1 : 0;
+        input.addEventListener("input", (e) => {
+          updateUniformValue(threePath, indexOffset + i, parseFloat(e.target.value) || 0);
+        });
+        grid.appendChild(input);
+      }
+      inputRow.appendChild(grid);
+    } else {
+      const count = typeInfo.inputs;
+      for (let i = 0; i < count; i++) {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.step = typeInfo.step;
+        if (typeInfo.min !== undefined) input.min = typeInfo.min;
+        input.style.width = "60px";
+        input.value = 0;
+        input.addEventListener("input", (e) => {
+          const val = typeInfo.step === 1 ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
+          updateUniformValue(threePath, indexOffset * count + i, val || 0);
+        });
+        inputRow.appendChild(input);
+      }
+    }
+    wrapper.appendChild(inputRow);
+    containerEl.appendChild(wrapper);
+  };
+  const leafLabel = path[path.length - 1];
+  if (item.size > 1) {
+    const group = document.createElement("div");
+    group.style.borderLeft = "2px solid #ccc";
+    group.style.paddingLeft = "8px";
+    group.style.margin = "4px 0";
+    const groupLabel = document.createElement("div");
+    groupLabel.textContent = leafLabel;
+    groupLabel.style.fontWeight = "bold";
+    groupLabel.style.fontSize = "13px";
+    group.appendChild(groupLabel);
+    for (let s = 0; s < item.size; s++) {
+      renderSingle(s, "[" + s + "]", group);
+    }
+    container.appendChild(group);
+  } else {
+    renderSingle(0, leafLabel, container);
+  }
+};
+
+const renderNode = (key, node, container) => {
+  if (node.isLeaf) {
+    renderLeaf(node.item, node.path, container);
+  } else {
+    const group = document.createElement("div");
+    group.style.borderLeft = "2px solid #ddd";
+    group.style.paddingLeft = "10px";
+    group.style.margin = "6px 0";
+    const label = document.createElement("div");
+    label.textContent = isNaN(key) ? key : "[" + key + "]";
+    label.style.fontWeight = "bold";
+    label.style.fontSize = "14px";
+    label.style.color = "#333";
+    group.appendChild(label);
+    const childrenContainer = document.createElement("div");
+    childrenContainer.style.display = "flex";
+    childrenContainer.style.flexDirection = "column";
+    childrenContainer.style.gap = "4px";
+    group.appendChild(childrenContainer);
+    const childKeys = Object.keys(node.children);
+    childKeys.forEach(childKey => {
+      renderNode(childKey, node.children[childKey], childrenContainer);
+    });
+    container.appendChild(group);
+  }
+};
+
+Object.keys(tree).forEach(key => {
+  if (key!=="iTime") renderNode(key, tree[key], uniforms);
+});
+
+const controls = new OrbitControls(camera,renderer.domElement);
+const update = (time) => {
+  cube.material.uniforms.iTime.value = time*0.001;
+  renderer.render(scene,camera);
+  requestAnimationFrame(update);
+}
+update(0);
+  
+</script>
