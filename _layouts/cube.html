@@ -3,6 +3,15 @@ layout: default
 ---
 
 <canvas id="canvas"></canvas>
+<div style="margin:8px 0">
+  <label for="cameraType">Perspective</label>
+  <input type="checkbox" name="cameraType" id="cameraType">
+  <br>
+  <div id="fovContainer" style="display:none">
+    <label for="cameraFov">Field Of View</label>
+    <input type="range" name="cameraFov" id="cameraFov" min="30" max="90" step="5" value="45">
+  </div>
+</div>
 <div id="uniforms"></div>
 {% if page.highlight %}
 {% capture shader_code %}
@@ -32,22 +41,26 @@ const yamlUniforms = {% if page.uniforms %}{{ page.uniforms | jsonify }}{% else 
 canvas.width = canvas.height = 512;
 
 const renderer = new THREE.WebGLRenderer({ canvas, context: canvas.getContext("webgl2",{ antialias: false, preserveDrawingBuffer: true }) });
-renderer.setSize(canvas.width,canvas.height,true);
-renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
-const camera = new THREE.PerspectiveCamera(45,canvas.width/canvas.height,0.125,256);
-camera.position.set(0,0,4);
+const perspectiveCamera = new THREE.PerspectiveCamera(45,1,0.125,256);
+const orthographicCamera = new THREE.OrthographicCamera(-2,2,2,-2,-8,256);
+perspectiveCamera.position.set(0,0,4);
+orthographicCamera.position.set(0,0,4);
+let camera = orthographicCamera;
+
 const scene = new THREE.Scene();
 
 const vs = `
 varying vec3 vP;
 varying vec3 vW;
 varying vec3 vN;
+varying mat4 vM;
 void main() {
   vP = position;
   vN = normal;
   vW = (modelMatrix*vec4(position,1)).xyz;
+  vM = modelMatrix;
   gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1);
 }`;
 
@@ -60,10 +73,18 @@ const fs = `
 varying vec3 vP;
 varying vec3 vW;
 varying vec3 vN;
+varying mat4 vM;
+uniform bool iPerspective;
 ${glsl}
 void main() {
   vec3 ro = cameraPosition;
-  vec3 rd = normalize(vW-ro);
+  vec3 rd;
+  if (iPerspective) {
+    rd = normalize(vW-ro);
+  } else {
+    ro = vW;
+    rd = normalize(vec3(vM[0][2],vM[1][2],vM[2][2]));
+  }
   mainCube(gl_FragColor,ro,rd);
 }`;
 
@@ -72,14 +93,110 @@ const cube = new THREE.Mesh(
   new THREE.ShaderMaterial({
     vertexShader: vs,
     fragmentShader: fs,
-    side: THREE.BackSide,
+    side: THREE.DoubleSide,
     depthWrite: false,
     uniforms: {
-      iTime: { value: 0 }
+      iTime: { value: 0 },
+      iPerspective: { value: 0 }
     }
   })
 );
 scene.add(cube);
+
+const cameraResize = (w,h,r=1) => {
+  renderer.setSize(w,h,true);
+  renderer.setPixelRatio(r);
+  
+  const aspect = w/h;
+
+  perspectiveCamera.aspect = aspect;
+  perspectiveCamera.zoom = aspect<=1?aspect:1;
+  perspectiveCamera.updateProjectionMatrix();
+
+  if (aspect<=1) {
+    const visibleHeight = orthographicCamera.left - orthographicCamera.right;
+    orthographicCamera.top = -visibleHeight/aspect/2;
+    orthographicCamera.bottom = visibleHeight/aspect/2;
+  } else {
+    const visibleHeight = orthographicCamera.top - orthographicCamera.bottom;
+    orthographicCamera.left = -visibleHeight*aspect/2;
+    orthographicCamera.right = visibleHeight*aspect/2;
+  }
+  orthographicCamera.updateProjectionMatrix();
+
+  //renderer.render(scene,camera);
+}
+const cameraResizeEvent = () => {
+  const z = Math.min(window.innerWidth-45,512);
+  cameraResize(z,z,window.devicePixelRatio);
+}
+window.addEventListener("resize",cameraResizeEvent);
+cameraResizeEvent();
+
+//let needsRender = true;
+const controls = new OrbitControls(camera,renderer.domElement);
+controls.addEventListener("change",() => { needsRender = true; });
+const update = () => {
+  //if (needsRender) {
+    renderer.render(scene,camera);
+    //needsRender = false;
+  //}
+  requestAnimationFrame(update);
+}
+update();
+
+cameraFov.addEventListener("input",() => {
+  perspectiveCamera.fov = cameraFov.value;
+  perspectiveCamera.updateProjectionMatrix();
+  needsRender = true;
+});
+
+cameraType.addEventListener("change", () => {
+  fovContainer.style.display = cameraType.checked?"block":"none";
+
+  const target = controls.target.clone();
+  const position = camera.position.clone();
+
+  const aspect = canvas.width / canvas.height;
+  const halfFovRad = perspectiveCamera.fov * Math.PI / 360;
+  if (cameraType.checked) {
+    const visibleHeight = (aspect<=1?(orthographicCamera.right-orthographicCamera.left):(orthographicCamera.top-orthographicCamera.bottom))/orthographicCamera.zoom;
+    const newDistance = visibleHeight / (2 * Math.tan(halfFovRad));
+    const direction = new THREE.Vector3().subVectors(position,target).normalize();
+    const newPosition = target.clone().add(direction.multiplyScalar(newDistance));
+    perspectiveCamera.position.copy(newPosition);
+    perspectiveCamera.updateProjectionMatrix();
+
+    camera = perspectiveCamera;
+    cube.material.uniforms.perspective.value = true;
+  } else {
+    const distance = position.distanceTo(target);
+    const visibleHeight = 2 * distance * Math.tan(halfFovRad);
+
+    orthographicCamera.position.copy(position);
+    if (aspect<=1) {
+      orthographicCamera.top = visibleHeight/aspect/2;
+      orthographicCamera.bottom = -visibleHeight/aspect/2;
+      orthographicCamera.left = -visibleHeight/2;
+      orthographicCamera.right = visibleHeight/2;
+    } else {
+      orthographicCamera.left = -visibleHeight*aspect/2;
+      orthographicCamera.right = visibleHeight*aspect/2;
+      orthographicCamera.top = visibleHeight/2;
+      orthographicCamera.bottom = -visibleHeight/2;
+    }
+    orthographicCamera.zoom = 1;
+    orthographicCamera.updateProjectionMatrix();
+
+    camera = orthographicCamera;
+    cube.material.uniforms.perspective.value = false;
+  }
+
+  controls.object = camera;
+  controls.target.copy(target);
+  controls.update();
+  //needsRender = true;
+});
 
 const gl = renderer.getContext();
 
@@ -619,13 +736,5 @@ const renderNode = (key, node, container) => {
 Object.keys(tree).forEach(key => {
   if (key!=="iTime") renderNode(key, tree[key], uniforms);
 });
-
-const controls = new OrbitControls(camera,renderer.domElement);
-const update = (time) => {
-  cube.material.uniforms.iTime.value = time*0.001;
-  renderer.render(scene,camera);
-  requestAnimationFrame(update);
-}
-update(0);
   
 </script>
