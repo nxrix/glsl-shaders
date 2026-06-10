@@ -141,17 +141,14 @@ void mainCube(out vec4 fragColor, vec3 ro, vec3 rd) {
   for (int i=0;i<512;i++) {
     vec3 p = ro+rd*t;
     //if (!iJ) p.x -= 0.5;
-    float d = f(p);
+    float r = length(p);
+    vec3 p0 = normalize(p)*(4.0-r);
+    float d = min(f(p),f(p0));
     if (d < EPS) {
       fragColor = vec4(ap(iJ?n0(p):n(p),iP)*0.5+0.5,1);
       return;
     }
     t += d;
-    if (t>=b.y) {
-      float r = length(p);
-      ro = normalize(p)*(4.0-r);
-      t = 0.0;
-    }
-    //{ fragColor = vec4(normalize(ro+rd*b.y)*0.5+0.5,1); return; }
+    //if (t>=b.y) { fragColor = vec4(normalize(ro+rd*b.y)*0.5+0.5,1); return; }
   }
 }
