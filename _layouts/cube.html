@@ -490,6 +490,7 @@ const updateUniformValue = (threePath, arrayIndex, componentIndex, val) => {
       parentObj[lastKey] = val;
     }
   }
+  needsRender = true;
 };
 
 const tree = {};
