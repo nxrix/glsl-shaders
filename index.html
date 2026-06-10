@@ -2,8 +2,6 @@
 layout: cube
 uniforms:
   iC: { value: 0, min: -2, max: 2, step: 0.01, range: true }
-  iA: { value: 0, min: 0, max: 5, range: true }
-  iP: { value: 0, min: 0, max: 7, range: true }
 ---
 
 #define TAU 6.2831853
@@ -15,8 +13,6 @@ uniforms:
 // #define s(p) p.xwyz
 #define s(p) p.xywz
 
-uniform int iA;
-uniform int iP;
 uniform bool iJ;
 uniform vec4 iC;
 
@@ -117,43 +113,20 @@ vec2 iSphere(vec3 ro, vec3 rd, float r) {
   return vec2(-b-h,-b+h);
 }
 
-vec3 ap(vec3 v,int ia,int ip) {
-    const ivec3 perms[6] = ivec3[](
-        ivec3(0, 1, 2),
-        ivec3(0, 2, 1),
-        ivec3(1, 0, 2),
-        ivec3(1, 2, 0),
-        ivec3(2, 0, 1),
-        ivec3(2, 1, 0)
-    );
-    int perm_idx = ia;
-    int sign_bits = ip;
-    ivec3 p = perms[perm_idx];
-    float sx = (sign_bits & 1) == 0 ? 1.0 : -1.0;
-    float sy = (sign_bits & 2) == 0 ? 1.0 : -1.0;
-    float sz = (sign_bits & 4) == 0 ? 1.0 : -1.0;
-    return vec3(sx * v[p.x], sy * v[p.y], sz * v[p.z]);
-}
-
 void mainCube(out vec4 fragColor, vec3 ro, vec3 rd) {
   ro *= 2.0;
-  vec2 b = iSphere(ro,rd,2.0+EPS);//(iJ?2.0:1.5)+EPS);
+  vec2 b = iSphere(ro,rd,(iJ?2.0:1.5)+EPS);
   if (b.x>b.y||b.y<0.0) { fragColor = vec4(0); return; }
   float t = max(0.0,b.x);
   for (int i=0;i<512;i++) {
     vec3 p = ro+rd*t;
-    //if (!iJ) p.x -= 0.5;
-    //float r = length(p);
-    //vec3 p0 = normalize(p)*(4.0-r);
-    //float d0 = f(p);
-    //float d1 = f(p0);
-    float d = f(p);//min(d0,d1);
+    if (!iJ) p.x -= 0.5;
+    float d = f(p);
     if (d < EPS) {
-      //if (d1<d0) p = p0;
-      fragColor = vec4(ap(iJ?n0(p):n(p),iA,iP)*0.5+0.5,1);
+      fragColor = vec4((iJ?n0(p):n(p))*0.5+0.5,1);
       return;
     }
     t += d;
-    if (t>=b.y) { fragColor = vec4(ap(normalize(ro+rd*b.y),iA,iP)*0.5+0.5,1); return; }
+    if (t>=b.y) { fragColor = vec4(0); return; }
   }
 }
