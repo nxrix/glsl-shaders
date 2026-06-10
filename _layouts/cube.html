@@ -2,7 +2,7 @@
 layout: default
 ---
 
-<canvas id="canvas"></canvas>
+<canvas id="canvas" style="border:1px solid var(--c3)"></canvas>
 <div style="margin:8px 0">
   <label for="cameraType">Perspective</label>
   <input type="checkbox" name="cameraType" id="cameraType">
@@ -102,6 +102,8 @@ const cube = new THREE.Mesh(
 );
 scene.add(cube);
 
+let needsRender = true;
+
 const cameraResize = (w,h,r=1) => {
   renderer.setSize(w,h,true);
   renderer.setPixelRatio(r);
@@ -124,6 +126,7 @@ const cameraResize = (w,h,r=1) => {
   orthographicCamera.updateProjectionMatrix();
 
   //renderer.render(scene,camera);
+  needsRender = true;
 }
 const cameraResizeEvent = () => {
   const z = Math.min(window.innerWidth-45,512);
@@ -132,12 +135,10 @@ const cameraResizeEvent = () => {
 window.addEventListener("resize",cameraResizeEvent);
 cameraResizeEvent();
 
-//let needsRender = true;
-
 cameraFov.addEventListener("input",() => {
   perspectiveCamera.fov = cameraFov.value;
   perspectiveCamera.updateProjectionMatrix();
-  //needsRender = true;
+  needsRender = true;
 });
 
 cameraType.addEventListener("change", () => {
@@ -184,7 +185,7 @@ cameraType.addEventListener("change", () => {
   controls.object = camera;
   controls.target.copy(target);
   controls.update();
-  //needsRender = true;
+  needsRender = true;
 });
 
 const gl = renderer.getContext();
@@ -727,14 +728,12 @@ Object.keys(tree).forEach(key => {
 });
 
 const controls = new OrbitControls(camera,renderer.domElement);
-controls.addEventListener("change",() => {
-  //needsRender = true;
-});
+controls.addEventListener("change",() => { needsRender = true; });
 const update = (time) => {
-  //if (needsRender) {
+  if (needsRender) {
     renderer.render(scene,camera);
-    //needsRender = false;
-  //}
+    needsRender = false;
+  }
   requestAnimationFrame(update);
 }
 update(0);
