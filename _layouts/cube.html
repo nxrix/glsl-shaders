@@ -60,7 +60,7 @@ void main() {
   vP = position;
   vN = normal;
   vW = (modelMatrix*vec4(position,1)).xyz;
-  vM = modelMatrix;
+  vM = projectionMatrix*modelMatrix;
   gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1);
 }`;
 
