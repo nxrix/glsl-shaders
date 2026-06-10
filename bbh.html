@@ -63,6 +63,28 @@ float hash(vec2 s) {
   return fract((p.x+p.y)*p.z);
 }
 
+float noise0(vec2 p) {
+  return hash(floor(p*256.0));
+}
+float tnoise(vec2 p) {
+  vec2 p_scaled = p * 256.0;
+  vec2 i = floor(p_scaled);
+  vec2 f = p_scaled-i;
+  float v00 = noise0( i/256.0);
+  float v10 = noise0((i+vec2(1,0))/256.0);
+  float v01 = noise0((i+vec2(0,1))/256.0);
+  float v11 = noise0((i+vec2(1,1))/256.0);
+  float v0 = mix(v00,v10,f.x);
+  float v1 = mix(v01,v11,f.x);
+  return mix(v0,v1,f.y);
+}
+float noise(vec2 p) {
+  return
+     tnoise(p/128.0)+
+    (tnoise(p/ 64.0)-0.5)*0.5+
+    (tnoise(p/ 32.0)-0.5)*0.25+
+    (tnoise(p/ 16.0)-0.5)*0.125;
+}
 /*float noise(vec2 p) {
   return
      texture(iChannel0,p/128.0).r+
@@ -70,9 +92,6 @@ float hash(vec2 s) {
     (texture(iChannel0,p/ 32.0).r-0.5)*0.25+
     (texture(iChannel0,p/ 16.0).r-0.5)*0.125;
 }*/
-float noise(vec2 p) {
-  return hash(p);
-}
 
 vec3 disk(float t, float a, float d) {
   float hv = pow(t*t*(1.0-t)*6.75,0.25);
@@ -130,7 +149,7 @@ bool hit_disk(vec3 oro, vec3 ro, vec3 rd, vec3 center, vec3 axis, vec3 u, vec3 v
   return true;
 }
 
-#define box_size vec3(50,25,25)
+#define box_size vec3(50,30,30)
 
 vec4 trace(vec3 ro, vec3 rd) {
   for (int i = 0; i < MAX; i++) {
