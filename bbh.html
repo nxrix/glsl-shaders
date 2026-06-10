@@ -22,7 +22,7 @@ uniforms:
 #define TAU 6.28318530
 #define EPS 0.001
 
-#define MAX 64
+#define MAX 128
 
 float ls(float x) {
   return abs(mod(x,2.0)-1.0);
@@ -92,7 +92,7 @@ vec3 bend(vec3 ro, vec3 rd, vec3 p, float rs, vec3 a, float s) {
   float r2 = dot(r,r);
   float r1 = inversesqrt(r2);
   vec3 L = cross(r,rd);
-  return -1.5*rs*(r*dot(L,L))*(r1/(r2*r2))+cross(a,r)*s/rs*1.5*r1/r2;
+  return -1.5*rs*(r*dot(L,L))*(r1/(r2*r2))+cross(a,r)*s*rs*3.0*r1/r2;
 }
 
 struct BlackHole {
