@@ -135,7 +135,9 @@ cameraResizeEvent();
 
 //let needsRender = true;
 const controls = new OrbitControls(camera,renderer.domElement);
-controls.addEventListener("change",() => { needsRender = true; });
+controls.addEventListener("change",() => {
+  //needsRender = true;
+});
 const update = () => {
   //if (needsRender) {
     renderer.render(scene,camera);
@@ -148,7 +150,7 @@ update();
 cameraFov.addEventListener("input",() => {
   perspectiveCamera.fov = cameraFov.value;
   perspectiveCamera.updateProjectionMatrix();
-  needsRender = true;
+  //needsRender = true;
 });
 
 cameraType.addEventListener("change", () => {
