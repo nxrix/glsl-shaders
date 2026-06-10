@@ -2,6 +2,7 @@
 layout: cube
 uniforms:
   iC: { value: 0, min: -2, max: 2, step: 0.01, range: true }
+  iP: { value: 0, min: 0, max: 47 }
 ---
 
 #define TAU 6.2831853
@@ -13,6 +14,7 @@ uniforms:
 // #define s(p) p.xwyz
 #define s(p) p.xywz
 
+uniform int iP;
 uniform bool iJ;
 uniform vec4 iC;
 
@@ -113,6 +115,24 @@ vec2 iSphere(vec3 ro, vec3 rd, float r) {
   return vec2(-b-h,-b+h);
 }
 
+vec3 ap(vec3 v,int idx) {
+    const ivec3 perms[6] = ivec3[](
+        ivec3(0, 1, 2),
+        ivec3(0, 2, 1),
+        ivec3(1, 0, 2),
+        ivec3(1, 2, 0),
+        ivec3(2, 0, 1),
+        ivec3(2, 1, 0)
+    );
+    int perm_idx = idx / 8;
+    int sign_bits = idx % 8;
+    ivec3 p = perms[perm_idx];
+    float sx = (sign_bits & 1) == 0 ? 1.0 : -1.0;
+    float sy = (sign_bits & 2) == 0 ? 1.0 : -1.0;
+    float sz = (sign_bits & 4) == 0 ? 1.0 : -1.0;
+    return vec3(sx * v[p.x], sy * v[p.y], sz * v[p.z]);
+}
+
 void mainCube(out vec4 fragColor, vec3 ro, vec3 rd) {
   ro *= 2.0;
   vec2 b = iSphere(ro,rd,(iJ?2.0:1.5)+EPS);
@@ -123,7 +143,7 @@ void mainCube(out vec4 fragColor, vec3 ro, vec3 rd) {
     if (!iJ) p.x -= 0.5;
     float d = f(p);
     if (d < EPS) {
-      fragColor = vec4((iJ?n0(p):n(p))*0.5+0.5,1);
+      fragColor = vec4(ap(iJ?n0(p):n(p),iP)*0.5+0.5,1);
       return;
     }
     t += d;
