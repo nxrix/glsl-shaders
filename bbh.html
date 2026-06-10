@@ -1,5 +1,21 @@
 ---
 layout: cube
+uniforms:
+  BH1:
+    p: { value: [-27,0,0] }
+    r: { value: 2.0 }
+    s: { value: 0.0, min: -1, max: 1, range: true }
+    i: { value: 3.5 }
+    o: { value: 9.5 }
+    a: { value: [0,1,0], min: -1, max: 1, range: true }
+  BH2:
+    p: { value: [32,0,0] }
+    r: { value: 1.0 }
+    s: { value: 0.0, min: -1, max: 1, range: true }
+    i: { value: 3.5 }
+    o: { value: 9.5 }
+    a: { value: [0,1,0], min: -1, max: 1, range: true }
+
 ---
 
 #define  PI 3.14159265
@@ -10,44 +26,44 @@ layout: cube
 
 // radius
 
-#define R1 2.0
-#define R2 1.0
+//#define R1 2.0
+//#define R2 1.0
 
-#define IR1 1.0/(3.0*R1)
-#define IR2 1.0/(3.0*R2)
+//#define IR1 1.0/(3.0*R1)
+//#define IR2 1.0/(3.0*R2)
 
 // spin
 
-#define S1 0.0
-#define S2 0.0
+//#define S1 0.0
+//#define S2 0.0
 
 // disk
 
-#define I1 R1 * 3.5
-#define O1 R1 * 9.5
-#define I2 R2 * 3.5
-#define O2 R2 * 9.5
+//#define I1 R1 * 3.5
+//#define O1 R1 * 9.5
+//#define I2 R2 * 3.5
+//#define O2 R2 * 9.5
 
 // position
 
-#define P1 vec3(-27,0,0)
-#define P2 vec3( 32,0,0)
+//#define P1 vec3(-27,0,0)
+//#define P2 vec3( 32,0,0)
 
 // axis
 
-#define A1 vec3(0,1,0)
-#define A2 vec3(0,1,0)
+//#define A1 vec3(0,1,0)
+//#define A2 vec3(0,1,0)
 
 // axis plane
 
 //U = normalize(cross(abs(A.y)<0.99?vec3(0,1,0):vec3(1,0,0),A));
 //V = cross(A,U);
 
-#define U1 vec3(1,0,0)
-#define V1 vec3(0,0,1)
+//#define U1 vec3(1,0,0)
+//#define V1 vec3(0,0,1)
 
-#define U2 vec3(1,0,0)
-#define V2 vec3(0,0,1)
+//#define U2 vec3(1,0,0)
+//#define V2 vec3(0,0,1)
 
 float ls(float x) {
   return abs(mod(x,2.0)-1.0);
@@ -120,8 +136,20 @@ vec3 bend(vec3 ro, vec3 rd, vec3 p, float rs, vec3 a, float s) {
   return -1.5*rs*(r*dot(L,L))*(r1/(r2*r2))+cross(a,r)*s*rs*3.0*r1/r2;
 }
 
+struct BlackHole {
+  vec3 p;
+  float r;
+  float s;
+  float i;
+  float o;
+  vec3 a;
+};
+
+uniform BlackHole BH1;
+uniform BlackHole BH2;
+
 void advance(inout vec3 o, inout vec3 d, float h) {
-  vec3 a = bend(o,d,P1,R1,A1,S1)+bend(o,d,P2,R2,A2,S2);
+  vec3 a = bend(o,d,BH1.p,BH1.r,normalize(BH1.a),BH1.s)+bend(o,d,BH2.p,BH2.r,normalize(BH2.a),BH2.s);
   d = normalize(d+a*h);
   o += d*h;
 }
@@ -154,9 +182,9 @@ bool hit_disk(vec3 oro, vec3 ro, vec3 rd, vec3 center, vec3 axis, vec3 u, vec3 v
 vec4 trace(vec3 ro, vec3 rd) {
   vec3 a = vec3(0);
   for (int i = 0; i < MAX; i++) {
-    float r1 = length(ro-P1);
-    float r2 = length(ro-P2);
-    if (r1 < R1 || r2 < R2) break;
+    float r1 = length(ro-BH1.p);
+    float r2 = length(ro-BH2.p);
+    if (r1 < BH1.r || r2 < BH2.r) break;
     if (r1 > 80.0 && r2 > 80.0) {
       //return vec4(0);
       vec3 id = 1.0/rd;
@@ -167,15 +195,21 @@ vec4 trace(vec3 ro, vec3 rd) {
       float tn = max(max(tmin.x,tmin.y),tmin.z);
       float tf = min(min(tmax.x,tmax.y),tmax.z);
       vec3 p = ro+rd*(tf-EPS);
-      a += (mod(floor(p.x*0.25)+floor(p.y*0.25)+floor(p.z*0.25),2.0)*vec3(0.1)+0.1)*(1.0-clamp(a,0.0,1.0));
+      a += (mod(floor(p.x*0.25)+floor(p.y*0.25)+floor(p.z*0.25),2.0)*vec3(0.0625)+0.0625)*(1.0-clamp(a,0.0,1.0));
       break;
     }
     vec3 oro = ro;
-    float h = clamp(min(r1*IR1,r2*IR2),1.0,16.0);
+    float h = clamp(min(r1/(3.0*BH1.r),r2/(3.0*BH2.r)),1.0,16.0);
     advance(ro,rd,h);
     vec3 c;
-    if (hit_disk(oro,ro,rd,P1,A1,U1,V1,I1,O1,0.0,c)) a += c;
-    if (hit_disk(oro,ro,rd,P2,A2,U2,V2,I2,O2,-1.5,c)) a += c.zyx+c.x*vec3(0.3,0.2,0.2);
+    vec3 a1 = normalize(BH1.a);
+    vec3 u1 = normalize(cross(abs(a1.y)<0.99?vec3(0,1,0):vec3(1,0,0),a1));
+    vec3 v1 = cross(a1,u1);
+    vec3 u2 = normalize(cross(abs(a2.y)<0.99?vec3(0,1,0):vec3(1,0,0),a2));
+    vec3 v2 = cross(a2,u2);
+    vec3 a2 = normalize(BH2.a);
+    if (hit_disk(oro,ro,rd,BH1.p,a1,u1,v1,BH1.i*BH1.r,BH1.o*BH1.r, 0.0,c)) a += c;
+    if (hit_disk(oro,ro,rd,BH2.p,a2,u2,v2,BH2.i*BH2.r,BH2.o*BH2.r,-1.5,c)) a += c.zyx+c.x*vec3(0.3,0.2,0.2);
   }
   return vec4(clamp(a,0.0,1.0),1);
 }
