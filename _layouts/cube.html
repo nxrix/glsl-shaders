@@ -708,8 +708,6 @@ const renderNode = (key, node, container) => {
     const label = document.createElement("div");
     label.textContent = isNaN(key) ? key : "[" + key + "]";
     label.style.fontWeight = "bold";
-    label.style.fontSize = "14px";
-    label.style.color = "#333";
     group.appendChild(label);
     const childrenContainer = document.createElement("div");
     childrenContainer.style.display = "flex";
