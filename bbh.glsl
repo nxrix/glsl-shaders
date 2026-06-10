@@ -1,0 +1,169 @@
+---
+layout: cube
+---
+
+#define  PI 3.14159265
+#define TAU 6.28318530
+#define EPS 0.001
+
+#define MAX 64
+
+// radius
+
+#define R1 2.0
+#define R2 1.0
+
+#define IR1 1.0/(3.0*R1)
+#define IR2 1.0/(3.0*R2)
+
+// spin
+
+#define S1 0.0
+#define S2 0.0
+
+// disk
+
+#define I1 R1 * 3.5
+#define O1 R1 * 9.5
+#define I2 R2 * 3.5
+#define O2 R2 * 9.5
+
+// position
+
+#define P1 vec3(-27,0,0)
+#define P2 vec3( 32,0,0)
+
+// axis
+
+#define A1 vec3(0,1,0)
+#define A2 vec3(0,1,0)
+
+// axis plane
+
+//U = normalize(cross(abs(A.y)<0.99?vec3(0,1,0):vec3(1,0,0),A));
+//V = cross(A,U);
+
+#define U1 vec3(1,0,0)
+#define V1 vec3(0,0,1)
+
+#define U2 vec3(1,0,0)
+#define V2 vec3(0,0,1)
+
+float ls(float x) {
+  return abs(mod(x,2.0)-1.0);
+}
+
+float lsa(float x) {
+  return abs(mod(x/PI,2.0)-1.0)*2.0-1.0;
+}
+
+float hash(vec2 s) {
+  vec3 p = fract(vec3(s.xyx)*443.8975);
+  p += dot(p,p.yzx+19.19);
+  return fract((p.x+p.y)*p.z);
+}
+
+/*float noise(vec2 p) {
+  return
+     texture(iChannel0,p/128.0).r+
+    (texture(iChannel0,p/ 64.0).r-0.5)*0.5+
+    (texture(iChannel0,p/ 32.0).r-0.5)*0.25+
+    (texture(iChannel0,p/ 16.0).r-0.5)*0.125;
+}*/
+float noise(vec2 p) {
+  return hash(p);
+}
+
+vec3 disk(float t, float a, float d) {
+  float hv = pow(t*t*(1.0-t)*6.75,0.25);
+  float n = noise(vec2((t-iTime*0.01)*20.0,lsa(a+iTime)*3.0))*2.0-1.0;
+  float t_noise = clamp(t*(1.0-n)+n,0.0,1.0);
+  float d_factor = -d*0.1+1.05;
+  float t_adjusted = t_noise*1.5/(t_noise*d_factor+0.5)*hv;
+  float t_factor = (t_adjusted*0.5+0.5*hv);
+  float t_half = (t_adjusted*0.5+0.4*hv);
+  float t_pow5 = exp(5.0*log(t_adjusted));
+  float t_pow20 = exp(20.0*log(t_adjusted));
+  vec3 acol = vec3(t_half,t_pow5*0.6,t_pow20*0.3)*t_factor;
+  vec3 dcol = (1.0-acol)*(max(d,0.0))*t_noise*hv*pow(ls(t*2.0+0.5),4.0)*vec3(0.5,0.6,0.4);
+  return clamp(mix(
+    acol+dcol,
+    vec3(t,0,0),
+    clamp(1.0-t,0.0,1.0)
+  )*1.2,0.0,1.0);
+}
+
+vec3 bend(vec3 ro, vec3 rd, vec3 p, float rs, vec3 a, float s) {
+  vec3 r = ro - p;
+  float r2 = dot(r,r);
+  float r1 = inversesqrt(r2);
+  vec3 L = cross(r,rd);
+  return -1.5*rs*(r*dot(L,L))*(r1/(r2*r2))+cross(a,r)*s*rs*3.0*r1/r2;
+}
+
+void advance(inout vec3 o, inout vec3 d, float h) {
+  vec3 a = bend(o,d,P1,R1,A1,S1)+bend(o,d,P2,R2,A2,S2);
+  d = normalize(d+a*h);
+  o += d*h;
+}
+
+bool hit_disk(vec3 oro, vec3 ro, vec3 rd, vec3 center, vec3 axis, vec3 u, vec3 v, float innerR, float outerR, float angleOffset, inout vec3 col){
+  float s1 = dot(oro - center, axis);
+  float s2 = dot(ro  - center, axis);
+  if (s1 * s2 >= 0.0) return false;
+  float t = s1 / (s1 - s2);
+  if (t < 0.0 || t > 1.0) return false;
+  vec3 p = mix(oro, ro, t);
+  vec3 rel = p - center;
+  vec3 radial = rel - axis * dot(rel, axis);
+  float r = length(radial);
+  if (r < innerR || r > outerR) return false;
+  float x = dot(radial, u);
+  float y = dot(radial, v);
+  float angle = atan(y, x) + angleOffset;
+  float temp = 1.0 - (r - innerR) / (outerR - innerR);
+
+  vec3 rl = normalize(radial);
+  vec3 tg = normalize(cross(axis, rl));
+  float dop = dot(tg,rd);
+  col = disk(temp,angle,-dop);
+  return true;
+}
+
+vec4 trace(vec3 ro, vec3 rd) {
+  vec4 a = vec4(0);
+  for (int i = 0; i < MAX; i++) {
+    float r1 = length(ro-P1);
+    float r2 = length(ro-P2);
+    if (r1 < R1 || r2 < R2 || (r1 > 80.0 && r2 > 80.0) ) {
+      a.w = 1.0;
+      break;
+    }
+    vec3 oro = ro;
+    float h = clamp(min(r1*IR1,r2*IR2),1.0,16.0);
+    advance(ro,rd,h);
+    vec3 c;
+    if (hit_disk(oro,ro,rd,P1,A1,U1,V1,I1,O1,0.0,c)) return vec4(c,1);
+    if (hit_disk(oro,ro,rd,P2,A2,U2,V2,I2,O2,-1.5,c)) return vec4(c.zyx+c.x*vec3(0.3,0.2,0.2),1);
+  }
+  return a;
+}
+
+#define box_size vec3(95,45,45)
+
+void mainCube(out vec4 fragColor, vec3 ro, vec3 rd) {
+  ro *= 95;
+  vec3 id = 1.0/rd;
+  vec3 t0 = (-box_size-ro)*id;
+  vec3 t1 = ( box_size-ro)*id;
+  vec3 tmin = min(t0,t1);
+  vec3 tmax = max(t0,t1);
+  float tn = max(max(tmin.x,tmin.y),tmin.z);
+  float tf = min(min(tmax.x,tmax.y),tmax.z);
+  if (tn>tf||tf<0.0) {
+    fragColor = vec4(0);
+    return;
+  }
+  ro += rd*(max(tn,0.0)+0.01);
+  fragColor = trace(ro,rd);
+}
