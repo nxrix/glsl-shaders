@@ -60,7 +60,7 @@ void main() {
   vP = position;
   vN = normal;
   vW = (modelMatrix*vec4(position,1)).xyz;
-  vM = projectionMatrix*modelMatrix;
+  vM = projectionMatrix*modelViewMatrix;
   gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1);
 }`;
 
@@ -133,18 +133,6 @@ window.addEventListener("resize",cameraResizeEvent);
 cameraResizeEvent();
 
 //let needsRender = true;
-const controls = new OrbitControls(camera,renderer.domElement);
-controls.addEventListener("change",() => {
-  //needsRender = true;
-});
-const update = () => {
-  //if (needsRender) {
-    renderer.render(scene,camera);
-    //needsRender = false;
-  //}
-  requestAnimationFrame(update);
-}
-update();
 
 cameraFov.addEventListener("input",() => {
   perspectiveCamera.fov = cameraFov.value;
@@ -737,5 +725,18 @@ const renderNode = (key, node, container) => {
 Object.keys(tree).forEach(key => {
   if (key!=="iTime") renderNode(key, tree[key], uniforms);
 });
+
+const controls = new OrbitControls(camera,renderer.domElement);
+controls.addEventListener("change",() => {
+  //needsRender = true;
+});
+const update = (time) => {
+  //if (needsRender) {
+    renderer.render(scene,camera);
+    //needsRender = false;
+  //}
+  requestAnimationFrame(update);
+}
+update(0);
   
 </script>
