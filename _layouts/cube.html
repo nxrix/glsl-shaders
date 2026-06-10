@@ -170,7 +170,7 @@ cameraType.addEventListener("change", () => {
     perspectiveCamera.updateProjectionMatrix();
 
     camera = perspectiveCamera;
-    cube.material.uniforms.perspective.value = true;
+    cube.material.uniforms.iPerspective.value = true;
   } else {
     const distance = position.distanceTo(target);
     const visibleHeight = 2 * distance * Math.tan(halfFovRad);
@@ -191,7 +191,7 @@ cameraType.addEventListener("change", () => {
     orthographicCamera.updateProjectionMatrix();
 
     camera = orthographicCamera;
-    cube.material.uniforms.perspective.value = false;
+    cube.material.uniforms.iPerspective.value = false;
   }
 
   controls.object = camera;
