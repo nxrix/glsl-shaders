@@ -152,6 +152,7 @@ bool hit_disk(vec3 oro, vec3 ro, vec3 rd, vec3 center, vec3 axis, vec3 u, vec3 v
 #define box_size vec3(50,30,30)
 
 vec4 trace(vec3 ro, vec3 rd) {
+  vec3 a = vec3(0);
   for (int i = 0; i < MAX; i++) {
     float r1 = length(ro-P1);
     float r2 = length(ro-P2);
@@ -165,17 +166,17 @@ vec4 trace(vec3 ro, vec3 rd) {
       vec3 tmax = max(t0,t1);
       float tn = max(max(tmin.x,tmin.y),tmin.z);
       float tf = min(min(tmax.x,tmax.y),tmax.z);
-      vec3 p = ro+rd*tf;
-      return vec4(mod(floor(p.x)+floor(p.y)+floor(p.z),2.0)*vec3(0.16)+0.61,1);
+      vec3 p = ro+rd*(tf-EPS);
+      a += mod(floor(p.x*0.25)+floor(p.y*0.25)+floor(p.z*0.25),2.0)*vec3(0.16)+0.61;
     }
-    //if (abs(ro.x)>box_size.x*0.5||abs(ro.y)>box_size.y*0.5||abs(ro.z)>box_size.z*0.5) return vec4(0);
     vec3 oro = ro;
     float h = clamp(min(r1*IR1,r2*IR2),1.0,16.0);
     advance(ro,rd,h);
     vec3 c;
-    if (hit_disk(oro,ro,rd,P1,A1,U1,V1,I1,O1,0.0,c)) return vec4(c,1);
-    if (hit_disk(oro,ro,rd,P2,A2,U2,V2,I2,O2,-1.5,c)) return vec4(c.zyx+c.x*vec3(0.3,0.2,0.2),1);
+    if (hit_disk(oro,ro,rd,P1,A1,U1,V1,I1,O1,0.0,c)) a += c;
+    if (hit_disk(oro,ro,rd,P2,A2,U2,V2,I2,O2,-1.5,c)) a += c.zyx+c.x*vec3(0.3,0.2,0.2);
   }
+  return vec4(a,1);
 }
 
 void mainCube(out vec4 fragColor, vec3 ro, vec3 rd) {
