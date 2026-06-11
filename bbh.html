@@ -163,7 +163,7 @@ vec4 trace(vec3 ro, vec3 rd) {
       break;
     }
     vec3 oro = ro;
-    float h = clamp(min(r1/(3.0*BH1.radius),r2/(3.0*BH2.radius)),1.0,16.0);
+    float h = min(r1/(3.0*BH1.radius),r2/(3.0*BH2.radius));
     advance(ro,rd,h);
     vec3 c;
     if (hit_disk(oro,ro,rd,BH1.position,a1,u1,v1,BH1.inner*BH1.radius,BH1.outer*BH1.radius, 0.0,c)) a += c*(1.0-a);
@@ -182,7 +182,7 @@ void mainCube(out vec4 fragColor, vec3 ro, vec3 rd) {
   float tn = max(max(tmin.x,tmin.y),tmin.z);
   float tf = min(min(tmax.x,tmax.y),tmax.z);
   if (tn>tf||tf<0.0) {
-    fragColor = vec4(0.0625,0.0625,0.0625,1);
+    fragColor = vec4(0);
     return;
   }
   ro += rd*(max(tn,0.0)+0.01);
