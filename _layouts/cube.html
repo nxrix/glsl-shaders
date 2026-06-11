@@ -665,11 +665,8 @@ const renderLeaf = (item, path, container) => {
         const maxVal = getMetaValue("max", indexOffset, i, undefined);
         const stepVal = getMetaValue("step", indexOffset, i, typeInfo.step || 0.01);
         const isRange = getMetaValue("range", indexOffset, i, false);
-        
-        const resolvedMin = minVal !== undefined ? minVal : 0;
-        const resolvedMax = maxVal !== undefined ? maxVal : Math.max(1.0, initVal * 2);
-        
-        const control = createNumberControl(initVal, resolvedMin, resolvedMax, stepVal, isRange, (val) => {
+
+        const control = createNumberControl(initVal, minVal, maxVal, stepVal, isRange, (val) => {
           updateUniformValue(threePath, indexOffset, i, val);
         });
         numCol.appendChild(control);
@@ -679,7 +676,7 @@ const renderLeaf = (item, path, container) => {
     wrapper.appendChild(inputRow);
     containerEl.appendChild(wrapper);
   };
-  
+
   const leafLabel = path[path.length - 1];
   if (item.size > 1) {
     const group = document.createElement("div");
