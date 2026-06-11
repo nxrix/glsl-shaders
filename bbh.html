@@ -2,7 +2,7 @@
 layout: cube
 title: Binary Black Holes
 info: |
-  Inspired by https://www.nasa.gov/universe/new-nasa-visualization-probes-the-light-bending-dance-of-binary-black-holes/
+  Inspired by [NASA Visualization | Light-bending Dance of Binary Black Holes](https://www.nasa.gov/universe/new-nasa-visualization-probes-the-light-bending-dance-of-binary-black-holes/)
 
 uniforms:
   BH1:
@@ -165,7 +165,7 @@ vec4 trace(vec3 ro, vec3 rd) {
       vec3 tmax = max(t0,t1);
       float tn = max(max(tmin.x,tmin.y),tmin.z);
       float tf = min(min(tmax.x,tmax.y),tmax.z);
-      vec3 p = ro+rd*(tf-EPS);
+      vec3 p = ro+rd*(tf-EPS)+4.0;
       a += (mod(floor(p.x*0.25)+floor(p.y*0.25)+floor(p.z*0.25),2.0)*vec3(0.0625)+0.0625)*(1.0-a);
       break;
     }
