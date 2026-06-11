@@ -708,6 +708,7 @@ const renderNode = (key, node, container) => {
     renderLeaf(node.item, node.path, container);
   } else {
     const group = document.createElement("div");
+    group.style.width = "fit-content";
     group.style.borderLeft = "2px solid var(--c3)";
     group.style.paddingLeft = "10px";
     group.style.margin = "6px 0";
