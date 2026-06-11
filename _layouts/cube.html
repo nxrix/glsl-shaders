@@ -545,13 +545,19 @@ const createNumberControl = (initialVal, minVal, maxVal, stepVal, isRange, onCha
     
     numInput.addEventListener("input", (e) => {
       slider.value = e.target.value;
-      onChange(Math.min(Math.max(parseFloat(e.target.value) || 0,minVal),maxVal));
+      let v = parseFloat(e.target.value) || 0;
+      if (minVal !== undefined) v = Math.max(v,minVal);
+      if (maxVal !== undefined) v = Math.min(v,maxVal);
+      onChange(v);
     });
     
     container.appendChild(slider);
   } else {
     numInput.addEventListener("input", (e) => {
-      onChange(Math.min(Math.max(parseFloat(e.target.value) || 0,minVal),maxVal));
+      let v = parseFloat(e.target.value) || 0;
+      if (minVal !== undefined) v = Math.max(v,minVal);
+      if (maxVal !== undefined) v = Math.min(v,maxVal);
+      onChange(v);
     });
   }
   return container;
