@@ -88,14 +88,14 @@ vec3 disk(float t, float a, float d) {
   )*1.2,0.0,1.0);
 }
 
-uniform float Bending;
+uniform float Lensing;
 
 vec3 bend(vec3 ro, vec3 rd, vec3 p, float rs, vec3 a, float s) {
   vec3 r = ro - p;
   float r2 = dot(r,r);
   float r1 = inversesqrt(r2);
   vec3 L = cross(r,rd);
-  return mix(-1.5*rs*(r*dot(L,L))*(r1/(r2*r2))+cross(a,r)*s*rs*3.0*r1/r2,vec3(0),Bending);
+  return mix(vec3(0),-1.5*rs*(r*dot(L,L))*(r1/(r2*r2))+cross(a,r)*s*rs*3.0*r1/r2,Lensing);
 }
 
 struct BlackHole {
