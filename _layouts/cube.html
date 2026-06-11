@@ -680,7 +680,7 @@ const renderLeaf = (item, path, container) => {
   const leafLabel = path[path.length - 1];
   if (item.size > 1) {
     const group = document.createElement("div");
-    group.style.borderLeft = "2px solid #ccc";
+    group.style.borderLeft = "2px solid var(--c3)";
     group.style.paddingLeft = "8px";
     group.style.margin = "4px 0";
     const groupLabel = document.createElement("div");
@@ -702,7 +702,7 @@ const renderNode = (key, node, container) => {
     renderLeaf(node.item, node.path, container);
   } else {
     const group = document.createElement("div");
-    group.style.borderLeft = "2px solid #ddd";
+    group.style.borderLeft = "2px solid var(--c3)";
     group.style.paddingLeft = "10px";
     group.style.margin = "6px 0";
     const label = document.createElement("div");
