@@ -16,6 +16,7 @@ uniforms:
     position: { value: [32,0,0] }
     inner: { value: 3.5 }
     outer: { value: 9.5 }
+  Lensing: { value: 1.0, min: 0.0, max: 1.0, range: true }
 ---
 
 #define  PI 3.14159265
@@ -87,12 +88,14 @@ vec3 disk(float t, float a, float d) {
   )*1.2,0.0,1.0);
 }
 
+uniform float Bending;
+
 vec3 bend(vec3 ro, vec3 rd, vec3 p, float rs, vec3 a, float s) {
   vec3 r = ro - p;
   float r2 = dot(r,r);
   float r1 = inversesqrt(r2);
   vec3 L = cross(r,rd);
-  return -1.5*rs*(r*dot(L,L))*(r1/(r2*r2))+cross(a,r)*s*rs*3.0*r1/r2;
+  return mix(-1.5*rs*(r*dot(L,L))*(r1/(r2*r2))+cross(a,r)*s*rs*3.0*r1/r2,vec3(0),Bending);
 }
 
 struct BlackHole {
