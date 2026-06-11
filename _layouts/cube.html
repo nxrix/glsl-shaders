@@ -49,10 +49,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, context: canvas.getContext("w
 renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
 const perspectiveCamera = new THREE.PerspectiveCamera(45,1,0.125,256);
-const orthographicCamera = new THREE.OrthographicCamera(-2,2,2,-2,-8,256);
-perspectiveCamera.position.set(0,0,4);
-orthographicCamera.position.set(0,0,4);
-const cameraPosition = {% if page.position %}{{ page.position | jsonify }}{% else %}[0,0,4]{% endif %};
+const orthographicCamera = new THREE.OrthographicCamera(-1.5,1.5,1.5,-1.5,-8,256);
+const cameraPosition = {% if page.position %}{{ page.position | jsonify }}{% else %}[0,0,3]{% endif %};
 perspectiveCamera.position.set(...cameraPosition);
 orthographicCamera.position.set(...cameraPosition);
 let camera = orthographicCamera;
