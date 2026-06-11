@@ -2,20 +2,22 @@
 layout: cube
 uniforms:
   BH1:
-    position: { value: [-27,0,0] }
     radius: { value: 2.0 }
     spin: { value: 0.0, min: -0.5, max: 0.5, range: true }
+    axis: { value: [0,1,0], min: -1, max: 1, range: true }
+    position: { value: [-27,0,0] }
     inner: { value: 3.5 }
     outer: { value: 9.5 }
-    axis: { value: [0,1,0], min: -1, max: 1, range: true }
   BH2:
-    position: { value: [32,0,0] }
     radius: { value: 1.0 }
     spin: { value: 0.0, min: -0.5, max: 0.5, range: true }
+    axis: { value: [0,1,0], min: -1, max: 1, range: true }
+    position: { value: [32,0,0] }
     inner: { value: 3.5 }
     outer: { value: 9.5 }
-    axis: { value: [0,1,0], min: -1, max: 1, range: true }
-
+  Background:
+    a: { value: 0.0625, min: 0, max: 1, range: true }
+    b: { value: 0.0625, min: 0, max: 1, range: true }
 ---
 
 #define  PI 3.14159265
@@ -96,16 +98,22 @@ vec3 bend(vec3 ro, vec3 rd, vec3 p, float rs, vec3 a, float s) {
 }
 
 struct BlackHole {
-  vec3 position;
   float radius;
   float spin;
+  vec3 axis;
+  vec3 position;
   float inner;
   float outer;
-  vec3 axis;
+};
+
+struct BG {
+  float a;
+  float b;
 };
 
 uniform BlackHole BH1;
 uniform BlackHole BH2;
+uniform BG Background;
 
 void advance(inout vec3 o, inout vec3 d, float h) {
   vec3 a = bend(o,d,BH1.position,BH1.radius,normalize(BH1.axis),BH1.spin)+bend(o,d,BH2.position,BH2.radius,normalize(BH2.axis),BH2.spin);
@@ -160,7 +168,7 @@ vec4 trace(vec3 ro, vec3 rd) {
       float tn = max(max(tmin.x,tmin.y),tmin.z);
       float tf = min(min(tmax.x,tmax.y),tmax.z);
       vec3 p = ro+rd*(tf-EPS);
-      a += (mod(floor(p.x*0.25)+floor(p.y*0.25)+floor(p.z*0.25),2.0)*vec3(0.0625)+0.0625)*(1.0-clamp(a,0.0,1.0));
+      a += (mod(floor(p.x*0.25)+floor(p.y*0.25)+floor(p.z*0.25),2.0)*vec3(Background.a)+Background.b)*(1.0-clamp(a,0.0,1.0));
       break;
     }
     vec3 oro = ro;
