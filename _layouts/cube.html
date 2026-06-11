@@ -640,17 +640,14 @@ const renderLeaf = (item, path, container) => {
       for (let i = 0; i < total; i++) {
         const isIdentityIndex = (i % (typeInfo.cols + 1) === 0);
         const defVal = (typeInfo.name.startsWith("mat") && !typeInfo.name.includes("x") && isIdentityIndex) ? 1 : 0;
-        
+
         const initVal = getMetaValue("value", indexOffset, i, defVal);
         const minVal = getMetaValue("min", indexOffset, i, undefined);
         const maxVal = getMetaValue("max", indexOffset, i, undefined);
         const stepVal = getMetaValue("step", indexOffset, i, typeInfo.step || 0.01);
         const isRange = getMetaValue("range", indexOffset, i, false);
-        
-        const resolvedMin = minVal !== undefined ? minVal : 0;
-        const resolvedMax = maxVal !== undefined ? maxVal : Math.max(1.0, initVal * 2);
-        
-        const control = createNumberControl(initVal, resolvedMin, resolvedMax, stepVal, isRange, (val) => {
+  
+        const control = createNumberControl(initVal, minVal, maxVal, stepVal, isRange, (val) => {
           updateUniformValue(threePath, indexOffset, i, val);
         });
         grid.appendChild(control);
